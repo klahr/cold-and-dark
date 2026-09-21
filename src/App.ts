@@ -8,7 +8,8 @@ import { PostFx, qualitySpec, type QualityLevel } from './render/postfx';
 import { ControlRig } from './render/ControlRig';
 import { InstrumentRig } from './render/InstrumentRig';
 import { YokeDucking } from './render/YokeDucking';
-import { SeatedCamera, VIEW_PRESETS } from './input/SeatedCamera';
+import { GuideArrow } from './render/GuideArrow';
+import { SeatedCamera, VIEW_PRESETS, type ViewPreset } from './input/SeatedCamera';
 import { Pointer } from './input/Pointer';
 import { VrControls } from './input/VrControls';
 import { detectVrSupport, requestVrSession } from './input/VrSession';
@@ -16,10 +17,14 @@ import { VrChecklistCard } from './ui/VrChecklistCard';
 import { Simulation } from './sim/Simulation';
 import { Challenge } from './sim/Challenge';
 import { findAircraft, DEFAULT_AIRCRAFT_ID } from './aircraft/registry';
+import type { AircraftDefinition, ControlDef } from './aircraft/types';
 import { EYE } from './render/frame';
 import { Hud } from './ui/Hud';
+import { KidHud } from './ui/kid/KidHud';
+import type { HudCallbacks, TrainerHud, UiMode } from './ui/TrainerHud';
 import { CockpitAudio } from './audio/CockpitAudio';
-import { describeControl } from './ui/describeControl';
+import { describeControl, type ControlDescription } from './ui/describeControl';
+import { describeControlInSwedish } from './ui/kid/swedish';
 
 export class App {
   readonly renderer: THREE.WebGLRenderer;
@@ -37,6 +42,12 @@ export class App {
    */
   readonly rig = new THREE.Group();
   readonly vrCard = new VrChecklistCard();
+  /**
+   * Points at the control guided mode is asking for. It lives in the scene
+   * rather than the overlay, so it works in a headset and never has to move
+   * the pilot's head to be useful.
+   */
+  readonly guideArrow = new GuideArrow();
   readonly postfx: PostFx;
   /** Timed-run state, kept across aircraft loads. */
   readonly challenge = new Challenge();
@@ -56,8 +67,11 @@ export class App {
   sim!: Simulation;
   controlRig!: ControlRig;
   instrumentRig!: InstrumentRig;
-  hud!: Hud;
+  hud!: TrainerHud;
+  private aircraft!: AircraftDefinition;
   private pointer!: Pointer;
+  /** Which overlay is driving the cockpit; remembered between visits. */
+  private uiMode: UiMode = loadUiMode();
 
   private readonly timer = new THREE.Timer();
   private readonly canvas: HTMLCanvasElement;
@@ -70,6 +84,7 @@ export class App {
   private guidedControlId: string | null = null;
   private hoveredControlId: string | null = null;
   private readonly focusPoint = new THREE.Vector3();
+  private readonly guidePoint = new THREE.Vector3();
 
   /** Dev-only free camera for inspecting geometry from outside the cabin. */
   private inspectCamera: THREE.PerspectiveCamera | null = null;
@@ -112,6 +127,7 @@ export class App {
 
     this.cockpit = buildCockpit();
     this.scene.add(this.cockpit.group);
+    this.scene.add(this.guideArrow.object);
     this.yokeDucking = new YokeDucking(this.cockpit);
 
     this.postfx = new PostFx(
@@ -143,33 +159,12 @@ export class App {
 
     this.guidedControlId = null;
     this.hoveredControlId = null;
+    this.aircraft = aircraft;
     this.sim = new Simulation(aircraft);
     this.controlRig = new ControlRig(aircraft, this.sim.controls, this.cockpit);
     this.instrumentRig = new InstrumentRig(aircraft, this.cockpit);
 
-    this.hud = new Hud(this.overlay, aircraft, this.sim, this.challenge, {
-      onSelectView: (i) => this.selectView(i),
-      onReset: () => this.resetAircraft(),
-      onFocusControl: (controlId) => this.focusControl(controlId),
-      onGuideControl: (controlId) => {
-        this.guidedControlId = controlId;
-        this.controlRig.setGuided(controlId);
-      },
-      onToggleSound: (on) => this.setSound(on),
-      onToggleYokes: (visible) => this.setYokesVisible(visible),
-      onSelectAircraft: (nextId) => this.loadAircraft(nextId),
-      onSetQuality: (level) => this.setQuality(level),
-      onEnterVr: () => {
-        void this.enterVr().catch((err: unknown) => {
-          console.error('Could not start the VR session', err);
-        });
-      },
-    });
-    this.hud.setQuality(this.quality);
-    this.hud.setSoundState(this.soundOn);
-    this.hud.setYokeState(this.yokesVisible);
-    if (this.vrSupport !== 'pending') this.hud.setVrSupport(this.vrSupport);
-    if (this.renderer.xr.isPresenting) this.hud.setVrPresenting(true);
+    this.buildHud();
 
     // New geometry has just appeared, so the frozen shadow map needs one
     // more pass to pick it up.
@@ -186,11 +181,7 @@ export class App {
       {
         onHover: (control, x, y) => {
           this.hoveredControlId = control?.def.id ?? null;
-          this.hud.showTooltip(
-            control ? describeControl(control.def, this.sim) : null,
-            x,
-            y,
-          );
+          this.hud.showTooltip(control ? this.describe(control.def) : null, x, y);
         },
         onActuate: (controlId) => {
           this.hud.onActuate(controlId);
@@ -198,13 +189,85 @@ export class App {
           // The tooltip is showing this control's old state; update it in
           // place so the readout agrees with what just happened.
           if (controlId === this.hoveredControlId) {
-            this.hud.refreshTooltip(
-              describeControl(this.sim.controls.def(controlId), this.sim),
-            );
+            const next = this.describe(this.sim.controls.def(controlId));
+            if (next) this.hud.refreshTooltip(next);
           }
         },
       },
     );
+  }
+
+  /**
+   * Builds the overlay for the current UI mode. Both implement `TrainerHud`
+   * and both drive the same simulation, so everything below this line is
+   * identical whichever one is on screen.
+   */
+  private buildHud(): void {
+    const callbacks: HudCallbacks = {
+      onSelectView: (i) => this.selectView(i),
+      onReset: () => this.resetAircraft(),
+      onFocusControl: (controlId) => this.focusControl(controlId),
+      onShowControl: (controlId) => this.showControl(controlId),
+      onGuideControl: (controlId) => {
+        this.guidedControlId = controlId;
+        this.controlRig.setGuided(controlId);
+      },
+      onToggleSound: (on) => this.setSound(on),
+      onToggleYokes: (visible) => this.setYokesVisible(visible),
+      onSelectAircraft: (nextId) => this.loadAircraft(nextId),
+      onSetQuality: (level) => this.setQuality(level),
+      onSelectUiMode: (mode) => this.setUiMode(mode),
+      onEnterVr: () => {
+        void this.enterVr().catch((err: unknown) => {
+          console.error('Could not start the VR session', err);
+        });
+      },
+    };
+
+    this.hud =
+      this.uiMode === 'kid'
+        ? new KidHud(this.overlay, this.aircraft, this.sim, callbacks)
+        : new Hud(this.overlay, this.aircraft, this.sim, this.challenge, callbacks);
+
+    this.hud.setQuality(this.quality);
+    this.hud.setSoundState(this.soundOn);
+    this.hud.setYokeState(this.yokesVisible);
+    this.hud.setActiveView(this.view.presetIndex);
+    this.hud.setInspecting(this.inspecting);
+    if (this.vrSupport !== 'pending') this.hud.setVrSupport(this.vrSupport);
+    if (this.renderer.xr.isPresenting) this.hud.setVrPresenting(true);
+  }
+
+  /**
+   * Swaps the overlay without rebuilding the aeroplane around it.
+   *
+   * The aircraft is reset on the way through, in both directions: half a
+   * procedure done under one overlay's rules is not a state the other one
+   * can describe, and a child arriving at a cockpit someone else left
+   * half-started has no way to work out where they are.
+   */
+  setUiMode(mode: UiMode): void {
+    if (this.uiMode === mode) return;
+    this.uiMode = mode;
+    saveUiMode(mode);
+    this.hud.dispose();
+    this.buildHud();
+    this.resetAircraft();
+    // The switch happened on a button press, which is the user gesture an
+    // AudioContext needs. For a six-year-old the engine note is most of
+    // what confirms that the thing they just did worked.
+    if (mode === 'kid') this.setSound(true);
+  }
+
+  get uiModeName(): UiMode {
+    return this.uiMode;
+  }
+
+  /** Hover read-out, in whichever language the current overlay speaks. */
+  private describe(def: ControlDef): ControlDescription | null {
+    return this.uiMode === 'kid'
+      ? describeControlInSwedish(def, this.sim)
+      : describeControl(def, this.sim);
   }
 
   start(): void {
@@ -220,6 +283,7 @@ export class App {
     this.pointer.dispose();
     this.controlRig.dispose();
     this.instrumentRig.dispose();
+    this.guideArrow.dispose();
     this.audio.dispose();
   }
 
@@ -287,6 +351,7 @@ export class App {
     this.soundOn = on;
     if (on) this.audio.resume();
     this.audio.setMuted(!on);
+    this.hud?.setSoundState(on);
   }
 
   setYokesVisible(visible: boolean): void {
@@ -310,6 +375,7 @@ export class App {
     this.instrumentRig.update(this.sim, dt);
     this.controlRig.tick(this.elapsed);
     this.hud.update(dt);
+    this.guideArrow.update(dt, this.view.camera, this.guidedWorldPoint());
     this.yokeDucking.update(dt, this.view.camera, this.focusWorldPoint());
 
     // Always stepped, even when another camera is being rendered, so the
@@ -332,6 +398,20 @@ export class App {
     }
 
     this.postfx.render(this.scene, this.view.camera);
+  }
+
+  /**
+   * World position of the control guided mode is asking for, for the arrow.
+   * Unlike `focusWorldPoint` this ignores hover: the arrow is answering
+   * "where is the next step", and following the mouse around would make it
+   * answer a question nobody asked.
+   */
+  private guidedWorldPoint(): THREE.Vector3 | null {
+    if (!this.guidedControlId) return null;
+    const obj = this.controlRig.objectFor(this.guidedControlId);
+    if (!obj) return null;
+    obj.object.getWorldPosition(this.guidePoint);
+    return this.guidePoint;
   }
 
   /**
@@ -404,6 +484,38 @@ export class App {
     if (!obj) return;
     const world = new THREE.Vector3();
     obj.object.getWorldPosition(world);
+    this.view.lookAtPoint(world);
+  }
+
+  /**
+   * Takes the pilot *to* a control: moves to the viewpoint it is best seen
+   * from, then aims the head at it. Aiming alone is not enough for the
+   * things that are not on the panel — the fuel selector is behind the
+   * throttle quadrant from the seated view, and no amount of looking at it
+   * brings it into sight.
+   *
+   * Which viewpoint is best is measured rather than tabulated: for each
+   * preset, how far off the centre of that view the control would fall. So
+   * it keeps working when a control moves, and a new aeroplane needs no
+   * entry anywhere.
+   */
+  private showControl(id: string): void {
+    const obj = this.controlRig.objectFor(id);
+    if (!obj) return;
+    const world = new THREE.Vector3();
+    obj.object.getWorldPosition(world);
+
+    let best = this.view.presetIndex;
+    let bestOffAxis = Infinity;
+    VIEW_PRESETS.forEach((preset, i) => {
+      const offAxis = offAxisAngle(preset, world);
+      if (offAxis < bestOffAxis) {
+        bestOffAxis = offAxis;
+        best = i;
+      }
+    });
+
+    this.selectView(best);
     this.view.lookAtPoint(world);
   }
 
@@ -488,6 +600,41 @@ export class App {
         this.selectView(n - 1);
       }
     });
+  }
+}
+
+/** How far off the centre of a viewpoint a world point falls, in radians. */
+function offAxisAngle(preset: ViewPreset, point: THREE.Vector3): number {
+  const eye = new THREE.Vector3(preset.eye[0], preset.eye[1], preset.eye[2]);
+  const forward = new THREE.Vector3(preset.target[0], preset.target[1], preset.target[2])
+    .sub(eye)
+    .normalize();
+  const toPoint = point.clone().sub(eye);
+  if (toPoint.lengthSq() < 1e-8) return Math.PI;
+  return forward.angleTo(toPoint.normalize());
+}
+
+const UI_MODE_KEY = 'cold-and-dark:ui-mode';
+
+/**
+ * The overlay choice survives a reload. Once a grown-up has set the cockpit
+ * up for a child, refreshing the page should not hand back a wall of
+ * English.
+ */
+function loadUiMode(): UiMode {
+  try {
+    return localStorage.getItem(UI_MODE_KEY) === 'kid' ? 'kid' : 'expert';
+  } catch {
+    // Storage blocked or unavailable. The expert HUD is the safe default.
+    return 'expert';
+  }
+}
+
+function saveUiMode(mode: UiMode): void {
+  try {
+    localStorage.setItem(UI_MODE_KEY, mode);
+  } catch {
+    // Nothing to do: the mode still applies for this visit.
   }
 }
 

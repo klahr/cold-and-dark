@@ -19,11 +19,27 @@ people actually make are modelled and explained.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
+npm run dev:proxy  # https://dev.klahr.se — see below
 
 npm test           # simulation test suite (no browser needed)
 npm run typecheck  # tsc --noEmit
 npm run build      # typecheck + production bundle
 ```
+
+`dev:proxy` is `vite --mode proxy`, for serving through the nginx box in
+front of `dev.klahr.se`. That mode binds `0.0.0.0:8080` with `strictPort`,
+because nginx proxies to this machine's LAN address on that one port and a
+server that quietly moved to 8081 presents as the site being down. It also
+lists the public name in `server.allowedHosts` — Vite answers an unrecognised
+`Host` header with a 403, which is what a reverse-proxied name looks like to
+it — and points the HMR socket at `wss://dev.klahr.se:443`, since TLS is
+terminated at the proxy while Vite itself speaks plain http. Plain `npm run
+dev` is untouched: localhost, 5173, HMR on the port it is really listening on.
+
+Only one thing can hold `:8080`. `uppspelt.service` and `warmap.service` are
+systemd *user* units that both want it, so stop whichever is active
+(`systemctl --user stop uppspelt`) before running `dev:proxy`, and start it
+again afterwards.
 
 No asset files and no external services: the cockpit geometry, every surface
 texture, the instrument faces and the engine sound are generated at runtime.
@@ -40,6 +56,7 @@ texture, the instrument faces and the engine sound are generated at runtime.
 | Turn a selector or the key | Click to step round a detent, or drag |
 | Crank the starter | Press **and hold** on the ignition key at START |
 | Hide the control wheel | `Y`, or the "Hide yoke" button |
+| Hand it to a six-year-old | The "🧒 Barnläge" button — see below |
 | Free orbit camera (dev) | `Shift`+`O`; `Esc` returns you to the seat |
 
 **Practice** mode highlights the control the current item asks for, verifies
@@ -59,6 +76,41 @@ There is no "acknowledge" button — every checklist line is a real action,
 including the ones usually hand-waved: throwing the seat latch, working the
 door handle, pulling the control lock. The propeller-area check reads your
 head direction, so you have to actually look out of both windows.
+
+## Barnläge
+
+A second overlay, in Swedish, for a child who can read. The goal it is built
+around is narrow and testable: a six-year-old sits down in front of a cold
+aeroplane and gets the engine running without an adult reading the screen for
+them.
+
+Everything under the overlay is unchanged. It runs the same `ChecklistRunner`
+over the same items — all of them, including the breakers and the shutdown
+drill — against the same simulation, so the aeroplane is exactly as easy or as
+hard to start as it is for anyone else. What changes is the layer of help:
+
+- one step on screen at a time, with a picture cue, a title of three or four
+  words, and a single sentence saying what to physically do;
+- an arrow flies to the control and nods at it, because the thing most likely
+  to stall a six-year-old is not knowing the procedure but not finding the
+  switch. *Var är den?* additionally takes them there, but only when asked;
+- *Varför då?* opens the reason for the step, rewritten to answer "what
+  happens if I don't" rather than "what the system does";
+- mistakes are answered with the fix and never in red — flooding the engine
+  gets the clearing procedure, not a telling-off;
+- no clock, and no systems read-out, because a child who cannot yet read
+  "suction 4.8 inHg" only learns that part of the screen is not for them.
+
+The Swedish lives in one file, `src/ui/kid/swedish.ts`: a step per checklist
+item, a message per fault code, and a name per control. Nothing is generated
+or translated at runtime. `tests/kid-copy.test.ts` fails if an aircraft gains
+a checklist item with no Swedish copy, if copy is left behind for an item that
+no longer exists, or if a sentence grows past twenty words.
+
+Switch in with **🧒 Barnläge** in the top left, and back out with *För vuxna*.
+The choice is remembered, so a reload does not hand a child a wall of English.
+VR is deliberately left out of it: the in-headset checklist card is English,
+and a child in a headset cannot be handed the mouse.
 
 ## What is simulated
 
@@ -92,6 +144,24 @@ turns into plain language:
 | Throttle wide open for the start | Warning about firing at high RPM on cold oil |
 | Injected: mixture left at cutoff after it fires | Engine dies a few seconds later |
 
+## Pointing at things
+
+Guided mode has always put a pulsing halo on the control the checklist wants.
+A halo only helps once you are already looking at the control, though — which
+is the moment you no longer need it. `render/GuideArrow.ts` is the other half:
+an arrow that hovers just off the control on the pilot's side of it, nodding,
+in the same amber and on the same pulse as the halo.
+
+When the control is outside the view it parks in front of the pilot instead
+and tilts the way they need to turn; turn that way and it flies to the
+control, so the two behaviours read as one object moving rather than two
+states. The threshold has hysteresis, or a control sitting on the boundary
+makes the arrow flap.
+
+It is in the scene rather than in the overlay for two reasons. It works in a
+headset, where there is no DOM. And it replaces moving the pilot's viewpoint
+for them, which is disorienting on a monitor and close to unacceptable in VR.
+
 ## Virtual reality
 
 Press **Enter VR** with a WebXR headset connected. The reference space is
@@ -124,6 +194,7 @@ src/
     shared/            panel furniture and the steam-gauge panel builder
     c172n/ c172s/      panel, instruments, checklists, systems per type
   render/         three.js; knows about control *kinds*, not aeroplanes
+    GuideArrow.ts      points at the control guided mode is asking for
     loft.ts            lofted surfaces
     fuselage.ts        the hull, as cross-sections; drives skin and lining
     panelShape.ts      panel outline, cut to the cabin
@@ -133,6 +204,8 @@ src/
   input/          seated camera, pointer gesture router, WebXR controllers
   audio/          procedural WebAudio engine, starter and switch sounds
   ui/             DOM overlay: checklist, coaching, tooltips, status
+    TrainerHud.ts      what App needs from an overlay; Hud and KidHud both fit
+    kid/               the Swedish child overlay and all of its copy
 ```
 
 **Adding an aircraft.** Everything an aeroplane *is* lives under
@@ -169,10 +242,18 @@ in.
 - a registry test that every aircraft builds and every checklist item
   references a control that exists;
 - a panel-fit test that every instrument, control and placard lies inside the
-  panel outline, and the outline inside the cabin.
+  panel outline, and the outline inside the cabin;
+- a copy test that every checklist item of every aircraft has Swedish child
+  wording, and that none of it has drifted back towards POH phrasing;
+- a guide-arrow test that the arrow aims at the control, hovers on the
+  pilot's side of it, parks in front when the control is out of view and
+  flies back to it when the pilot turns.
 
-The last is the only test touching `src/render/`; the geometry it checks is
-pure arithmetic over the hull loft and needs no DOM.
+The two `src/render/` tests need no DOM and no renderer: panel fit is
+arithmetic over the hull loft, and the arrow's placement is arithmetic over a
+camera and a world point. Both caught real bugs — the arrow was built along
+the axis a *camera* looks down, and `Object3D.lookAt` aims the opposite way
+for everything that is not a camera, so it pointed exactly backwards.
 
 ## Accuracy and its limits
 

@@ -12,18 +12,7 @@ import {
 import { QUALITY_LEVELS, type QualityLevel } from '../render/postfx';
 import { VIEW_PRESETS } from '../input/SeatedCamera';
 import type { ControlDescription } from './describeControl';
-
-export interface HudCallbacks {
-  onSelectView(index: number): void;
-  onReset(): void;
-  onFocusControl(id: string): void;
-  onGuideControl(id: string | null): void;
-  onToggleSound(on: boolean): void;
-  onToggleYokes(visible: boolean): void;
-  onSelectAircraft(id: string): void;
-  onSetQuality(level: QualityLevel): void;
-  onEnterVr(): void;
-}
+import type { HudCallbacks, TrainerHud } from './TrainerHud';
 
 const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -53,7 +42,7 @@ function row(label: string, value: string): HTMLElement {
  * aeroplane behaves identically at every level, because the skill being
  * measured is knowing the procedure, not beating a handicap.
  */
-export class Hud {
+export class Hud implements TrainerHud {
   readonly checklist: ChecklistRunner;
 
   private readonly root: HTMLElement;
@@ -159,6 +148,11 @@ export class Hud {
     });
     this.yokeBtn.title =
       'The control wheel sits between you and the lower panel, just as it does in the aeroplane';
+    const kidBtn = this.button('🧒 Barnläge', () => this.callbacks.onSelectUiMode('kid'));
+    kidBtn.title =
+      'A Swedish, one-step-at-a-time overlay for a child who can read. Same aeroplane, same checklist.';
+    options.append(kidBtn);
+
     this.vrBtn = this.button('Checking VR…', () => this.callbacks.onEnterVr());
     this.vrBtn.className = 'vr';
     this.vrBtn.disabled = true;

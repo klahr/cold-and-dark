@@ -8,6 +8,20 @@ import type { Simulation } from '../sim/Simulation';
  * Browsers will not start an AudioContext without a gesture, so nothing is
  * built until the pilot first touches something.
  */
+/**
+ * Gyro whine, the one voice in the mix that is a steady tone rather than a
+ * noise or a rumble.
+ *
+ * The gain looks tiny next to the engine's 0.2, and it is — but it sits in
+ * the 1.5–4 kHz band the ear is most sensitive to, so by loudness rather
+ * than amplitude it was the most prominent thing in a quiet cockpit. It is
+ * meant to be the sound of something spinning up somewhere behind the panel,
+ * noticed only if you listen for it.
+ */
+const GYRO_PEAK_GAIN = 0.0038;
+const GYRO_BASE_HZ = 1180;
+const GYRO_SPOOL_HZ = 620;
+
 export class CockpitAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -132,10 +146,19 @@ export class CockpitAudio {
     this.gyroGain.gain.value = 0;
     this.gyroGain.connect(this.master);
 
+    // A triangle at 2 kHz has its harmonics at 6 and 10 kHz, which is what
+    // makes the whine read as a piercing electronic beep rather than as
+    // something spinning. Rolling them off leaves the tone without the edge.
+    const gyroFilter = ctx.createBiquadFilter();
+    gyroFilter.type = 'lowpass';
+    gyroFilter.frequency.value = 2600;
+    gyroFilter.Q.value = 0.7;
+    gyroFilter.connect(this.gyroGain);
+
     this.gyroOsc = ctx.createOscillator();
     this.gyroOsc.type = 'triangle';
-    this.gyroOsc.frequency.value = 2100;
-    this.gyroOsc.connect(this.gyroGain);
+    this.gyroOsc.frequency.value = GYRO_BASE_HZ;
+    this.gyroOsc.connect(gyroFilter);
     this.gyroOsc.start();
   }
 
@@ -201,8 +224,8 @@ export class CockpitAudio {
     // Gyro whine rises as the instruments spool up.
     if (this.gyroGain && this.gyroOsc) {
       const spool = Math.max(sim.vacuum.gyroSpool, sim.vacuum.turnCoordinatorSpool);
-      this.gyroGain.gain.setTargetAtTime(spool * 0.012, t, 0.3);
-      this.gyroOsc.frequency.setTargetAtTime(1500 + spool * 900, t, 0.3);
+      this.gyroGain.gain.setTargetAtTime(spool * GYRO_PEAK_GAIN, t, 0.3);
+      this.gyroOsc.frequency.setTargetAtTime(GYRO_BASE_HZ + spool * GYRO_SPOOL_HZ, t, 0.3);
     }
   }
 

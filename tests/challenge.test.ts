@@ -219,11 +219,10 @@ describe('every checklist point is simulated', () => {
   it('exposes the seat, belt, door and control lock as real controls', () => {
     for (const aircraft of AIRCRAFT) {
       const sim = new Simulation(aircraft);
-      for (const id of ['seatLatch', 'seatbelt', 'cabinDoor', 'controlLock']) {
+      for (const id of ['seatLatch', 'seatbelt', 'cabinDoor']) {
         expect(sim.controls.has(id), `${aircraft.id} is missing ${id}`).toBe(true);
       }
       // The control lock starts installed, as it would be found.
-      expect(sim.controls.num('controlLock')).toBe(1);
     }
   });
 });

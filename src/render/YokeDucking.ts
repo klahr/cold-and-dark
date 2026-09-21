@@ -1,7 +1,17 @@
 import * as THREE from 'three';
 import type { CockpitShell } from './Cockpit';
 
-/** Opacity the control wheel fades to when it is hiding something. */
+/**
+ * Opacity the control wheel sits at normally.
+ *
+ * Not one. The wheel is squarely between the pilot and the bottom of the
+ * panel, which is where the throttle quadrant, the switch row and the
+ * ignition key all are. In the aeroplane you move your head; on a screen or
+ * in a seated headset you cannot, so it stays slightly see-through the whole
+ * time and you can work behind it without anything having to move.
+ */
+const BASE_OPACITY = 0.55;
+/** Opacity it fades further to when it is hiding the control being asked for. */
 const DUCKED_OPACITY = 0.18;
 /** Seconds for the fade, so the yoke does not pop in and out. */
 const FADE = 0.18;
@@ -20,8 +30,8 @@ export class YokeDucking {
   private readonly meshes: THREE.Object3D[] = [];
   private readonly target = new THREE.Vector3();
   private readonly origin = new THREE.Vector3();
-  private opacity = 1;
-  private wanted = 1;
+  private opacity = BASE_OPACITY;
+  private wanted = BASE_OPACITY;
   private checkTimer = 0;
 
   constructor(private readonly shell: CockpitShell) {
@@ -30,6 +40,7 @@ export class YokeDucking {
         if ((obj as THREE.Mesh).isMesh) this.meshes.push(obj);
       });
     }
+    this.applyOpacity();
   }
 
   /**
@@ -40,16 +51,24 @@ export class YokeDucking {
     this.checkTimer -= dt;
     if (this.checkTimer <= 0) {
       this.checkTimer = 0.1;
-      this.wanted = focus && this.occluded(camera, focus) ? DUCKED_OPACITY : 1;
+      this.wanted = focus && this.occluded(camera, focus) ? DUCKED_OPACITY : BASE_OPACITY;
     }
 
     if (Math.abs(this.opacity - this.wanted) < 0.002) return;
     this.opacity += (this.wanted - this.opacity) * (1 - Math.exp(-dt / FADE));
+    this.applyOpacity();
+  }
 
+  /**
+   * The wheel never writes depth, because it is never fully opaque. That is
+   * also what lets a pointer ray and the controls behind it read through it
+   * rather than being clipped away by a wheel you can already see through.
+   */
+  private applyOpacity(): void {
     const mat = this.shell.yokeMaterial;
-    mat.transparent = this.opacity < 0.995;
+    mat.transparent = true;
     mat.opacity = this.opacity;
-    mat.depthWrite = !mat.transparent;
+    mat.depthWrite = false;
     mat.needsUpdate = true;
   }
 

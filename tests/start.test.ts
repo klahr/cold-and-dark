@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { crank, newSim, prepareForStart, primeStroke, run, select } from './helpers';
+import { C172N } from '../src/aircraft/c172n';
 
 /**
  * The golden start: follow the POH and the engine runs. Every other test in
@@ -299,3 +300,24 @@ function crankAt(
   select(sim, 'magKey', 'BOTH');
   run(sim, 0.2, step);
 }
+
+/**
+ * Checklist items have to be things the pilot does, not things that are
+ * already true. Carburettor heat used to start pushed in, so the step ticked
+ * itself off before it had been read.
+ */
+describe('cold and dark really is cold and dark', () => {
+  it('leaves carburettor heat out, so setting it COLD is a real action', () => {
+    const sim = newSim();
+    expect(sim.controls.num('carbHeat')).toBeLessThan(0.1);
+
+    const item = C172N.checklists
+      .flatMap((s) => s.items)
+      .find((i) => i.id === 'carb-heat-cold');
+    expect(item).toBeDefined();
+    expect(item?.satisfied(sim)).toBe(false);
+
+    sim.controls.set('carbHeat', 1);
+    expect(item?.satisfied(sim)).toBe(true);
+  });
+});

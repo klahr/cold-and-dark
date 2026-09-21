@@ -1,6 +1,8 @@
 import type { ChecklistRunner } from '../sim/Checklist';
 import type { QualityLevel } from '../render/postfx';
 import type { ControlDescription } from './describeControl';
+import type { VrSupport } from '../input/VrSession';
+import type { VrCardContent } from './VrChecklistCard';
 
 /** Which of the two overlays is driving the cockpit. */
 export type UiMode = 'expert' | 'kid';
@@ -33,8 +35,14 @@ export interface HudCallbacks {
  */
 export interface TrainerHud {
   readonly checklist: ChecklistRunner;
+  /**
+   * What the in-headset wrist board should show right now. Each overlay
+   * supplies it in its own language, so the board never has to know which
+   * one is driving.
+   */
+  vrCardContent(): VrCardContent;
   setActiveView(index: number): void;
-  setVrSupport(support: 'unsupported' | 'available'): void;
+  setVrSupport(support: VrSupport): void;
   setVrPresenting(presenting: boolean): void;
   setInspecting(on: boolean): void;
   setQuality(level: QualityLevel): void;

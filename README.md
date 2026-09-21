@@ -19,22 +19,36 @@ people actually make are modelled and explained.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run dev:proxy  # https://dev.klahr.se — see below
 
 npm test           # simulation test suite (no browser needed)
 npm run typecheck  # tsc --noEmit
 npm run build      # typecheck + production bundle
 ```
 
-`dev:proxy` is `vite --mode proxy`, for serving through the nginx box in
-front of `dev.klahr.se`. That mode binds `0.0.0.0:8080` with `strictPort`,
-because nginx proxies to this machine's LAN address on that one port and a
-server that quietly moved to 8081 presents as the site being down. It also
-lists the public name in `server.allowedHosts` — Vite answers an unrecognised
-`Host` header with a 403, which is what a reverse-proxied name looks like to
-it — and points the HMR socket at `wss://dev.klahr.se:443`, since TLS is
-terminated at the proxy while Vite itself speaks plain http. Plain `npm run
-dev` is untouched: localhost, 5173, HMR on the port it is really listening on.
+### Serving it somewhere else
+
+| Script | Serves | For |
+|---|---|---|
+| `npm run dev` | `http://localhost:5173` | ordinary local work |
+| `npm run dev:proxy` | `:8080` behind nginx, http | dev.klahr.se as it is today |
+| `npm run dev:proxy:tls` | `:8080` behind nginx, https | dev.klahr.se once that vhost has a certificate |
+| `npm run dev:tls` | `https://<lan ip>:8443` | **testing VR** |
+
+The proxy modes exist because nginx runs on another box and forwards to this
+machine's LAN address on one fixed port. They bind `0.0.0.0` with
+`strictPort` — a server that quietly moved to 8081 presents as the site being
+down — list the public name in `server.allowedHosts`, since Vite answers an
+unrecognised `Host` with a 403, and point the HMR socket at the port the
+browser can actually reach rather than the one Vite is listening on.
+
+**VR needs one of the https modes.** `navigator.xr` is `[SecureContext]`: on a
+plain-http origin the API is not disabled-with-a-reason, it is absent, so a
+headset browser reports no WebXR while the headset is on your face. The VR
+button says which of those it is. `dev:tls` is the way round it that does not
+involve touching the nginx box — it serves TLS straight off this machine with
+a throwaway self-signed certificate, so the headset warns once and then has
+the secure origin WebXR wants. Putting a real certificate on the dev.klahr.se
+vhost and using `dev:proxy:tls` is the fix that lasts.
 
 Only one thing can hold `:8080`. `uppspelt.service` and `warmap.service` are
 systemd *user* units that both want it, so stop whichever is active
@@ -72,9 +86,23 @@ from go until the engine is running and the after-start items are done.
 Difficulty changes only how much the trainer tells you; the aeroplane behaves
 identically at every level. Mistakes cost time rather than ending the run.
 
+**The control wheel is slightly see-through.** It sits squarely between the
+pilot and the bottom of the panel — where the throttle quadrant, the switch
+row and the ignition key all are. In the aeroplane you move your head; on a
+screen, or seated in a headset, you cannot. So it stays at a little over half
+opacity the whole time and fades further still when it is actually covering
+the control the checklist is asking for. Nothing has to move for you to work
+behind it.
+
+Neither pointer has ever picked against the wheel — both raycast only the
+controls' own hit meshes — so clicks have always passed straight through it.
+The VR pointer ray and its reticle are now drawn through it as well: a ray
+that stops dead at something you can see through reads as a ray that has hit
+something. `Y` still hides the wheel outright.
+
 There is no "acknowledge" button — every checklist line is a real action,
 including the ones usually hand-waved: throwing the seat latch, working the
-door handle, pulling the control lock. The propeller-area check reads your
+door handle, closing the cabin door. The propeller-area check reads your
 head direction, so you have to actually look out of both windows.
 
 ## Barnläge
@@ -125,8 +153,15 @@ and a child in a headset cannot be handed the mouse.
 - **Engine** — state machine over `off → cranking → catching → running →
   dying`, with prime charge, flood level, RPM dynamics, oil pressure and
   temperature lags, and the thirty-second oil pressure rule.
-- **Vacuum** — engine-driven pump, suction gauge, gyros that take most of a
-  minute to erect, heading indicator that precesses and must be reset.
+- **Vacuum** — engine-driven pump, suction gauge, heading indicator that
+  precesses and must be reset. The attitude indicator is modelled as a gyro
+  rather than as a dial: with the rotor stopped there is nothing holding its
+  axis up, so a cold aeroplane shows a definite wrong attitude rather than a
+  vague sag, and no amount of waiting will level it. Erecting is a separate,
+  slower business than spinning up — the OFF flag drops out well before the
+  horizon has finished settling, and the last few degrees come out over the
+  following minute, which is the order you see it in the aeroplane. Shut the
+  engine down and it leans back over as the rotor runs down.
 
 Mistakes it will let you make, each raising a typed fault the coaching layer
 turns into plain language:
@@ -164,13 +199,97 @@ for them, which is disorienting on a monitor and close to unacceptable in VR.
 
 ## Virtual reality
 
-Press **Enter VR** with a WebXR headset connected. The reference space is
-`local`, so wherever your head is becomes the left seat. Both controllers get
-a pointer ray, and every gesture runs through the same `ControlObject`
-interface the mouse uses — so the spring-loaded starter detent and the drag
-scaling behave identically in VR with no duplicated control logic. Guided
-mode moves onto a kneeboard card beside the panel, since the DOM overlay does
-not exist inside a headset.
+**Foveated rendering is off, and stays off.** three.js defaults it to
+maximum, which renders the edges of the view at a lower resolution — and in a
+cockpit the edges are where the work is: the instruments, the switch row and
+the throttle quadrant are all in the lower half of the field. Nothing here
+turns it back on, adaptively or otherwise; a blurred panel is not a trade
+worth making.
+
+Frames are bought with `VR_FRAMEBUFFER_SCALE` in `App.ts` instead — the
+per-eye render resolution as a fraction of what the headset asks for. At 0.85
+it softens the whole image very slightly and evenly, which reads as nothing
+much, rather than blurring the part you are trying to read. Raise it toward 1
+for sharpness, drop it toward 0.7 for frames. It has to be set before the
+session starts.
+
+Press **Enter VR** with a WebXR headset connected — from either overlay;
+Barnläge offers it too, so a child can fly the Swedish version in a headset.
+The reference space is `local`, so wherever your head is becomes the left
+seat. Both controllers get a pointer ray, and every gesture runs through the
+same `ControlObject` interface the mouse uses — so the spring-loaded starter
+detent and the drag scaling behave identically in VR with no duplicated
+control logic.
+
+**The checklist rides on your left wrist**, and it is always up. The DOM
+overlay does not exist inside a headset, so the coaching lives in the world:
+a board on the left hand carrying the current step, the progress bar and a
+window of the list either side of where you are. It was behind a wrist-turn
+gesture at first, but a checklist you have to ask for is a checklist you
+forget to ask for, and the point of putting it on the wrist was to be where
+your eyes already go. Turning it toward you now only brightens it — and gets
+that hand's pointer out of the way.
+
+While the board is up, that hand's controller model, joint spheres, pointer
+ray and reticle are all withheld — they sit exactly where the board appears,
+so leaving them drawn puts a ray through the thing you are reading. It also
+stops picking while withheld: a pointer you cannot see should not be able to
+reach into the cockpit and move a switch. The other hand is untouched and
+still flies the aeroplane.
+
+**Hand tracking** works alongside controllers. Joints are drawn as
+primitives rather than with three.js's mesh profile, which would fetch a
+model from a CDN — nothing here is downloaded. A pinch raises the same
+`select` events a trigger does, so every gesture goes through the existing
+`ControlObject` path with no hand-specific control logic. With hands the
+board hangs off the wrist joint rather than a grip space, and the held-
+controller stand-in is hidden so an empty hand is not drawn holding one.
+
+Which controller is the left one is read from the input source's
+`handedness`, not assumed from its index — that arrives on `connected`, which
+can fire well after the session starts. With no left hand at all, the board
+falls back to a kneeboard clipped beside the panel, because a wrist display
+on a wrist that is not there is no display.
+
+What counts as reading it is a roll of the wrist — supinating, turning the palm up to look
+at it. That means watching the hand's own left-right axis, not its up-down
+one: WebXR grip space runs -Z along a held rod with +Y out of the top of the
+fist on the thumb side, which leaves the palm facing *sideways*. Pitching the
+hand rotates about X and so moves Y, which is why watching Y answered to
+nodding the hand forward instead of to rolling it.
+
+Squareness is measured as an absolute value, because the two faces of a hand
+point opposite ways and turning either one to your face is the same gesture.
+The board then mounts itself on whichever face you presented.
+
+Summoning it is the deliberate act; dismissing it is not. Once up it stays
+for a second and a half whatever the hand does, and then only goes when the
+wrist is turned well away — a much wider band than the one that summoned it.
+Reading takes a couple of seconds and the hand drifts while you read, so an
+honest "is the palm still square to my face" test dismisses the board
+mid-sentence. It also fades out more slowly than it fades in: a board that
+snaps away reads as a glitch, one that sinks away reads as dismissed. This matters because grip
+space is the part of WebXR runtimes agree on least — getting it wrong should
+cost a board on the other side of your hand, not a board that cannot be
+summoned at all.
+
+The list keeps the bottom of the board unconditionally. It used to start
+wherever the step text happened to end, so a long callout with a long reason
+pushed it off the bottom and the checklist vanished while the board still
+looked fine. The step text is capped and ellipsised to fit above it instead.
+
+The board is a dumb renderer: each overlay hands it a `VrCardContent`, so the
+expert HUD supplies POH English and Barnläge supplies Swedish, and neither
+the board nor the simulation has to know which is in play. The two are laid
+out quite differently. The expert board is mostly words, because the words
+are the content. **The kid board is mostly picture**: one large glyph for the
+step, the step in a few words, one short line of what to do, and the rest of
+the list as a row of pictures rather than a column of Swedish to read through
+to find your place. The reasoning is dropped from it entirely — in a headset
+it is one more paragraph between a six-year-old and the switch, and it stays
+on the flat card where they can open it when they want it. A hard-mode timed
+run gets the callout and nothing else — a board on your wrist would otherwise
+be a way round the difficulty.
 
 ## Architecture
 
@@ -205,6 +324,7 @@ src/
   audio/          procedural WebAudio engine, starter and switch sounds
   ui/             DOM overlay: checklist, coaching, tooltips, status
     TrainerHud.ts      what App needs from an overlay; Hud and KidHud both fit
+    VrChecklistCard.ts the wrist board, for when there is no DOM
     kid/               the Swedish child overlay and all of its copy
 ```
 
@@ -239,15 +359,25 @@ in.
 - one negative test per row of the mistakes table above;
 - a shutdown test asserting the aeroplane ends up genuinely dead;
 - a determinism test running the same inputs at 30 Hz and 120 Hz;
+- an attitude-indicator test that it starts toppled, never finds level with
+  the rotor stopped, erects after a start, comes up to speed well before it
+  finishes erecting, and topples again after shutdown;
 - a registry test that every aircraft builds and every checklist item
   references a control that exists;
 - a panel-fit test that every instrument, control and placard lies inside the
-  panel outline, and the outline inside the cabin;
+  panel outline, and the outline inside the cabin — plus a rotary-lettering
+  test, because a selector is as wide as its position names and not as wide
+  as its knob, which is how the ignition switch's ring of OFF/R/L/BOTH/START
+  came to be part-buried in the lining;
 - a copy test that every checklist item of every aircraft has Swedish child
   wording, and that none of it has drifted back towards POH phrasing;
 - a guide-arrow test that the arrow aims at the control, hovers on the
   pilot's side of it, parks in front when the control is out of view and
-  flies back to it when the pilot turns.
+  flies back to it when the pilot turns;
+- a VR-support test that the three ways WebXR can be unavailable are told
+  apart, since they have completely different fixes;
+- a wrist-board test that the slice of checklist it shows stays centred on
+  the current item and spans section boundaries.
 
 The two `src/render/` tests need no DOM and no renderer: panel fit is
 arithmetic over the hull loft, and the arrow's placement is arithmetic over a

@@ -5,6 +5,8 @@ import { ChecklistRunner } from '../../sim/Checklist';
 import type { QualityLevel } from '../../render/postfx';
 import type { ControlDescription } from '../describeControl';
 import type { HudCallbacks, TrainerHud } from '../TrainerHud';
+import { windowChecklist, type VrCardContent } from '../VrChecklistCard';
+import type { VrSupport } from '../../input/VrSession';
 import { KID_FAULTS, KID_PRAISE, KID_UI, kidStep, type KidStep } from './swedish';
 
 /** Seconds on one step before the UI offers to point at the control. */
@@ -67,6 +69,7 @@ export class KidHud implements TrainerHud {
   private readonly tooltipEl: HTMLElement;
   private readonly finishEl: HTMLElement;
   private readonly soundBtn: HTMLButtonElement;
+  private readonly vrBtn: HTMLButtonElement;
 
   private readonly totalItems: number;
   private lastItemId: string | null = null;
@@ -104,6 +107,12 @@ export class KidHud implements TrainerHud {
     );
     tools.append(this.soundBtn);
     tools.append(this.toolButton(KID_UI.reset, () => this.callbacks.onReset()));
+    // Hidden until a headset is actually there. A disabled button explaining
+    // a certificate problem is noise to a six-year-old; the grown-up can read
+    // the real reason on the expert HUD.
+    this.vrBtn = this.toolButton(`🥽 ${KID_UI.vr}`, () => this.callbacks.onEnterVr());
+    this.vrBtn.hidden = true;
+    tools.append(this.vrBtn);
     const adults = this.toolButton(KID_UI.adults, () => this.callbacks.onSelectUiMode('expert'));
     adults.classList.add('kid-quiet');
     tools.append(adults);
@@ -242,13 +251,67 @@ export class KidHud implements TrainerHud {
     document.documentElement.lang = 'en';
   }
 
-  /* The rest of the trainer's controls have no place in the kid UI: there
-   * is no view bar, no quality picker and no headset button to keep in step
-   * with. VR stays out deliberately — the in-headset checklist card is
-   * English, and a child in a headset cannot be handed the mouse. */
+  setVrSupport(support: VrSupport): void {
+    this.vrBtn.hidden = support !== 'available';
+    this.vrBtn.title = KID_UI.vrHint;
+  }
+
+  setVrPresenting(presenting: boolean): void {
+    this.vrBtn.textContent = presenting ? `🥽 ${KID_UI.inVr}` : `🥽 ${KID_UI.vr}`;
+    this.vrBtn.setAttribute('aria-pressed', String(presenting));
+  }
+
+  /**
+   * The wrist board, in Swedish. In a headset this is the whole UI — the DOM
+   * overlay does not exist there — so it carries the step, what to do, why,
+   * and where the child is in the list.
+   */
+  vrCardContent(): VrCardContent {
+    const pos = this.checklist.position;
+    const done = Math.round(this.checklist.progress * this.totalItems);
+
+    if (!pos) {
+      return {
+        theme: 'kid',
+        glyph: '\u{1F634}',
+        title: KID_UI.title,
+        section: '',
+        headline: KID_UI.allDone,
+        detail: '',
+        hint: '',
+        progress: 1,
+        stepLabel: `${this.totalItems} / ${this.totalItems}`,
+        items: [],
+        finished: true,
+      };
+    }
+
+    const step = kidStep(pos.item.id) ?? UNKNOWN;
+    return {
+      theme: 'kid',
+      // The picture carries the step; the words underneath are the caption.
+      glyph: step.icon,
+      title: KID_UI.title,
+      section: sectionName(pos.section.id),
+      headline: step.title,
+      detail: step.action,
+      // No "why" on the board. In a headset it is one more paragraph between
+      // a six-year-old and the switch; it stays on the flat card, where they
+      // can open it when they want it.
+      hint: '',
+      progress: this.checklist.progress,
+      stepLabel: KID_UI.stepOf(done + 1, this.totalItems),
+      items: windowChecklist(this.checklist, (item) => {
+        const s = kidStep(item.id) ?? UNKNOWN;
+        return { text: s.title, icon: s.icon };
+      }),
+      finished: false,
+    };
+  }
+
+  /* No view bar, no quality picker and no yoke toggle in the kid UI, so
+   * these have nothing to keep in step with. */
   setActiveView(): void {}
-  setVrSupport(): void {}
-  setVrPresenting(): void {}
   setInspecting(): void {}
   setQuality(_level: QualityLevel): void {}
   setYokeState(): void {}

@@ -56,6 +56,51 @@ export const SEAT = {
   backZ: 0.52,
 } as const;
 
+/**
+ * The armrest along each door.
+ *
+ * Exported for the same reason as the column below: things get mounted near
+ * it, and a control authored into the space it occupies is invisible without
+ * being obviously misplaced in the source. The door handle sat inside this
+ * box for exactly that reason — it read as "hidden in the door" when the
+ * door lining was never the problem.
+ */
+export const ARMREST = {
+  /** Centre height, and the box's section. */
+  y: 0.55,
+  width: 0.07,
+  height: 0.04,
+  /** Centre and length along the cabin. */
+  z: 0.08,
+  length: 0.44,
+  /** How far its outboard face is set in from the sidewall. */
+  inset: 0.035,
+} as const;
+
+/**
+ * The control column, shared because things are mounted *on* it.
+ *
+ * The control lock is a pin through the column. Authored independently of
+ * the column it passes through, it drifts off the moment either moves — and
+ * it had: the lock was sitting 35 mm above a column 22 mm thick, floating in
+ * clear air in front of the pilot.
+ */
+export const YOKE = {
+  /** Hub centre: a forearm's reach from the seat back. */
+  hubY: 0.60,
+  hubZ: -0.34,
+  /** Height at which the column disappears into the panel. */
+  panelY: 0.66,
+  columnRadius: 0.022,
+} as const;
+
+/**
+ * Angle the column rises at on its way from the hub up into the panel.
+ * Anything mounted through the column needs it to sit square to the shaft
+ * rather than square to the world.
+ */
+export const YOKE_TILT = Math.atan2(YOKE.panelY - YOKE.hubY, YOKE.hubZ - PANEL.center[2]);
+
 /** Default pilot eye point, left seat. */
 export const EYE = [SEAT.pilotX, 1.05, 0.17] as const;
 

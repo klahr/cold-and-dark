@@ -12,7 +12,7 @@ import { GuideArrow } from './render/GuideArrow';
 import { SeatedCamera, VIEW_PRESETS, type ViewPreset } from './input/SeatedCamera';
 import { Pointer } from './input/Pointer';
 import { VrControls } from './input/VrControls';
-import { detectVrSupport, requestVrSession } from './input/VrSession';
+import { detectVrSupport, requestVrSession, type VrSupport } from './input/VrSession';
 import { VrChecklistCard } from './ui/VrChecklistCard';
 import { Simulation } from './sim/Simulation';
 import { Challenge } from './sim/Challenge';
@@ -57,7 +57,7 @@ export class App {
   private readonly frameTimes: number[] = [];
   private autoTuned = false;
   private vrControls: VrControls | null = null;
-  private vrSupport: 'unsupported' | 'available' | 'pending' = 'pending';
+  private vrSupport: VrSupport | 'pending' = 'pending';
 
   /**
    * These are replaced wholesale when a different aircraft is loaded. The
@@ -109,6 +109,20 @@ export class App {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType('local');
+    // Foveated rendering off, and left off. three.js defaults it to maximum,
+    // which renders the edges of the view at a lower resolution — and in a
+    // cockpit the edges are where the work is: the instruments, the switch
+    // row and the throttle quadrant are all in the lower field. Frames are
+    // bought with the framebuffer scale below instead, which softens the
+    // whole image evenly rather than blurring the part you are reading.
+    this.renderer.xr.setFoveation(0);
+
+    // Resolution the headset renders each eye at, as a fraction of the one
+    // it asks for. Slightly under costs little to look at — it is a uniform
+    // softening rather than foveation's blurred edges — and fill rate is
+    // what a stereo cockpit runs out of first. This has to be set before the
+    // session starts; it is fixed for the life of the layer.
+    this.renderer.xr.setFramebufferScaleFactor(VR_FRAMEBUFFER_SCALE);
 
     this.view = new SeatedCamera(window.innerWidth / window.innerHeight);
     this.rig.add(this.view.camera);
@@ -382,11 +396,17 @@ export class App {
     // seated view is never stale when control returns to it.
     this.view.update(dt);
 
+    // Driven in and out of VR so the reveal has something to ease from, and
+    // so it is already hidden when a session ends.
+    this.vrCard.update(dt, this.view.camera, presenting ? this.hud.vrCardContent() : null);
+    // The left hand's ray is drawn through whatever is in front of it, so it
+    // would otherwise lie straight across the board while you read.
+    this.vrControls?.setPointerSuppressed('left', this.vrCard.beingRead);
+
     if (presenting) {
       // The composer knows nothing about the stereo XR framebuffer, so VR
       // renders straight through.
-      this.vrControls?.update();
-      this.vrCard.update(this.hud.checklist, this.sim.definition.name);
+      this.vrControls?.update(dt);
       this.renderer.render(this.scene, this.view.camera);
       return;
     }
@@ -445,6 +465,10 @@ export class App {
           this.hud.onActuate(id);
           this.audio.click(clickKindFor(this.sim.controls.def(id).kind));
         },
+        // Straps the checklist to the left hand — a controller's grip, or
+        // a tracked hand's wrist. Until there is one, it stays clipped
+        // beside the panel.
+        onLeftAnchorChanged: (anchor) => this.vrCard.attachToWrist(anchor, this.rig),
       },
     );
 
@@ -465,7 +489,6 @@ export class App {
     this.rig.position.set(EYE[0], EYE[1], EYE[2]);
     this.view.camera.position.set(0, 0, 0);
     this.view.camera.rotation.set(0, 0, 0);
-    this.vrCard.object.visible = true;
     // Audio needs the session's user gesture to start, and in a headset the
     // engine note is most of the sense of presence.
     this.setSound(true);
@@ -474,7 +497,6 @@ export class App {
 
   private onVrEnd(): void {
     this.rig.position.set(0, 0, 0);
-    this.vrCard.object.visible = false;
     this.hud.setVrPresenting(false);
   }
 
@@ -602,6 +624,16 @@ export class App {
     });
   }
 }
+
+/**
+ * Per-eye render resolution, as a fraction of what the headset asks for.
+ *
+ * The lever for VR frame rate, now that foveation is off for good: unlike
+ * foveation it softens the whole image evenly rather than blurring the edges,
+ * which is where this cockpit keeps its instruments. Raise it toward 1 for
+ * sharpness, drop it toward 0.7 for frames.
+ */
+const VR_FRAMEBUFFER_SCALE = 0.85;
 
 /** How far off the centre of a viewpoint a world point falls, in radians. */
 function offAxisAngle(preset: ViewPreset, point: THREE.Vector3): number {

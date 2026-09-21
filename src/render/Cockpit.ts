@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CABIN, PANEL, PANEL_HALF_H, SEAT } from './frame';
+import { ARMREST, CABIN, PANEL, PANEL_HALF_H, SEAT, YOKE, YOKE_TILT } from './frame';
 import { panelHalfWidthAt, panelOutline } from './panelShape';
 import { MAT } from './materials';
 import {
@@ -237,8 +237,14 @@ function buildCabinFittings(): THREE.Group {
   // of the cabin, so they sat half-buried in the wall.
   for (const side of [-1, 1] as const) {
     // Armrest along the door, just under the window sill.
-    const armrestX = cabinSurfaceX(0.08, 0.55);
-    const armrest = box(0.07, 0.04, 0.44, MAT.trim(), [side * (armrestX - 0.035), 0.55, 0.08]);
+    const armrestX = cabinSurfaceX(ARMREST.z, ARMREST.y);
+    const armrest = box(
+      ARMREST.width,
+      ARMREST.height,
+      ARMREST.length,
+      MAT.trim(),
+      [side * (armrestX - ARMREST.inset), ARMREST.y, ARMREST.z],
+    );
     armrest.rotation.z = side * 0.06;
     g.add(armrest);
 
@@ -576,17 +582,19 @@ function buildYokeAssembly(x: number, yokeMat: THREE.MeshStandardMaterial): THRE
   const g = new THREE.Group();
   g.name = `yoke-${x < 0 ? 'pilot' : 'copilot'}`;
 
-  // Origin is the yoke hub, a forearm's reach from the seat back.
-  const hubY = 0.60;
-  const hubZ = -0.34;
-  const panelY = 0.66;
+  // Origin is the yoke hub, a forearm's reach from the seat back. These come
+  // from `frame.ts` because the control lock is mounted on this column and
+  // has to be able to find it.
+  const hubY = YOKE.hubY;
+  const hubZ = YOKE.hubZ;
+  const panelY = YOKE.panelY;
   const panelZ = PANEL.center[2];
-  const tilt = Math.atan2(panelY - hubY, hubZ - panelZ);
+  const tilt = YOKE_TILT;
   g.position.set(x, hubY, hubZ);
 
   // Control column running forward and slightly up into the panel.
   const len = Math.hypot(panelY - hubY, hubZ - panelZ);
-  const column = cylinder(0.022, 0.022, len, yokeMat, 16);
+  const column = cylinder(YOKE.columnRadius, YOKE.columnRadius, len, yokeMat, 16);
   column.rotation.x = Math.PI / 2 - tilt;
   column.position.set(0, (panelY - hubY) / 2, (panelZ - hubZ) / 2);
   g.add(column);

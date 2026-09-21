@@ -132,6 +132,15 @@ button {
   color: var(--good);
 }
 
+/* A fixable problem rather than a missing feature, so it reads as a warning
+   to act on instead of something greyed out and forgotten. */
+.options button.vr-blocked:disabled {
+  opacity: 1;
+  border-color: rgba(224, 168, 60, 0.45);
+  color: var(--warn);
+  cursor: help;
+}
+
 .options button[aria-pressed='true'] {
   border-color: rgba(86, 178, 240, 0.4);
   background: rgba(86, 178, 240, 0.18);

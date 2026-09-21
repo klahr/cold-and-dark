@@ -60,14 +60,6 @@ export const C172N_CHECKLISTS: readonly ChecklistSection[] = [
         hint: 'Pull the door handle on your left to the latched position.',
       },
       {
-        id: 'control-lock',
-        callout: 'CONTROL LOCK — REMOVED',
-        highlight: 'controlLock',
-        satisfied: (s) => s.controls.num('controlLock') < 0.3,
-        why: 'The lock pins the control column so the surfaces cannot bang about in the wind. It sits right in front of the ignition key so that you physically cannot reach the key without confronting it.',
-        hint: 'Pull the red pin out of the control column — drag it downward.',
-      },
-      {
         id: 'brakes-set',
         callout: 'BRAKES — TEST AND SET',
         highlight: 'parkingBrake',

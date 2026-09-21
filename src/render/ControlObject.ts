@@ -70,6 +70,76 @@ const THROW = 0.6;
 /** Pale tip on a paddle switch, so which way it is leaning is obvious. */
 const TIP_MATERIAL = () => knobMaterial(0xd8dade);
 
+/**
+ * Markings that have to be legible wherever the control happens to sit.
+ *
+ * The fuel selector is on the floor by the pilot's ankle and the ignition
+ * switch is under the left of the panel — both in shadow for most of the
+ * day. Unlit and tone-mapping-exempt, so they read at the same brightness
+ * down there as they would on the glareshield, which is what paint with this
+ * much contrast actually does in a real cabin.
+ */
+const MARKING_COLOR = 0xf4f2ea;
+const markingMaterial = () =>
+  new THREE.MeshBasicMaterial({ color: MARKING_COLOR, toneMapped: false });
+
+/** Label colour for rotary detents. Brighter than general panel lettering. */
+const DETENT_LABEL = '#f4f2ea';
+
+/**
+ * How far a rotary's detent names sit from its centre, as a multiple of its
+ * radius, and their cap height.
+ *
+ * Exported because they decide the control's real footprint: a selector is
+ * as wide as its lettering, not as wide as its knob, and the panel-fit test
+ * has no other way to know that.
+ */
+export const DETENT_LABELS = {
+  selectorRadius: 2.05,
+  selectorSize: 0.0064,
+  // Smaller than the selector's, and not by taste: the ignition switch sits
+  // at the outboard edge of the panel with the master switch alongside, so
+  // its lettering has the panel edge on one side and a neighbour on the
+  // other. The legibility comes from contrast and the tick marks instead.
+  keyRadius: 1.85,
+  keySize: 0.0052,
+} as const;
+
+/**
+ * Outermost reach of a rotary control, lettering included. A rough width per
+ * character is enough: this exists to catch a label growing off the panel or
+ * onto its neighbour, not to typeset anything.
+ */
+export function detentReach(def: SelectorControl | KeyControl): number {
+  const isKey = def.kind === 'key';
+  const radius = def.radius * (isKey ? DETENT_LABELS.keyRadius : DETENT_LABELS.selectorRadius);
+  const size = isKey ? DETENT_LABELS.keySize : DETENT_LABELS.selectorSize;
+
+  // Each name is centred on its own detent and runs horizontally, so what
+  // matters is how far out that detent sits sideways plus half the word —
+  // not the full word measured radially from the middle.
+  let widest = 0;
+  def.positions.forEach((name, i) => {
+    const angle = def.angles[i] ?? 0;
+    const halfWord = (name.length * size * 0.62) / 2;
+    widest = Math.max(widest, Math.abs(Math.sin(angle)) * radius + halfWord);
+  });
+  return widest;
+}
+
+/**
+ * A tick at each detent, so the positions are readable as positions before
+ * any of the words have been.
+ */
+function detentTicks(radius: number, angles: readonly number[]): THREE.Mesh[] {
+  return angles.map((angle) => {
+    const tick = box(radius * 0.09, radius * 0.34, 0.0015, markingMaterial(), [0, 0, 0]);
+    tick.position.set(Math.sin(angle) * radius * 1.16, Math.cos(angle) * radius * 1.16, 0.0046);
+    tick.rotation.z = -angle;
+    return tick;
+  });
+}
+
 export function createControlObject(def: ControlDef): ControlObject {
   switch (def.kind) {
     case 'toggle':
@@ -309,13 +379,15 @@ function rotaryHandle(def: SelectorControl): THREE.Group {
   g.add(knob);
 
   // Pointer arm showing which detent is selected.
-  const arm = box(r * 0.28, r * 1.5, r * 0.42, MAT.frame(), [0, r * 0.6, r * 0.55]);
+  const arm = box(r * 0.30, r * 1.6, r * 0.42, MAT.frame(), [0, r * 0.65, r * 0.55]);
   g.add(arm);
-  const tip = new THREE.Mesh(
-    new THREE.CircleGeometry(r * 0.16, 12),
-    new THREE.MeshBasicMaterial({ color: 0xf2f2ee, toneMapped: false }),
-  );
-  tip.position.set(0, r * 1.15, r * 0.77);
+
+  // A painted stripe the length of the arm rather than a dot on the end of
+  // it. Which way the handle is pointing is the entire content of this
+  // control, and a dot only says so once you have already found it.
+  g.add(box(r * 0.16, r * 1.5, 0.0012, markingMaterial(), [0, r * 0.66, r * 0.77]));
+  const tip = new THREE.Mesh(new THREE.CircleGeometry(r * 0.2, 14), markingMaterial());
+  tip.position.set(0, r * 1.28, r * 0.77);
   g.add(tip);
 
   return g;
@@ -330,10 +402,16 @@ function makeSelector(def: SelectorControl): ControlObject {
   plate.position.z = 0.002;
   base.staticParts.push(plate);
 
+  for (const tick of detentTicks(def.radius * 1.35, def.angles)) base.root.add(tick);
+
   def.positions.forEach((name, i) => {
     const angle = def.angles[i] ?? 0;
-    const rad = def.radius * 1.85;
-    const label = makeLabel(name, { size: 0.0046 });
+    const rad = def.radius * DETENT_LABELS.selectorRadius;
+    const label = makeLabel(name, {
+      size: DETENT_LABELS.selectorSize,
+      color: DETENT_LABEL,
+      weight: 700,
+    });
     label.position.set(Math.sin(angle) * rad, Math.cos(angle) * rad, 0.0045);
     base.root.add(label);
   });
@@ -383,10 +461,16 @@ function makeKey(def: KeyControl): ControlObject {
   plate.position.z = 0.002;
   base.staticParts.push(plate);
 
+  for (const tick of detentTicks(r * 1.4, def.angles)) base.root.add(tick);
+
   def.positions.forEach((name, i) => {
     const angle = def.angles[i] ?? 0;
-    const rad = r * 1.95;
-    const label = makeLabel(name, { size: 0.0044 });
+    const rad = r * DETENT_LABELS.keyRadius;
+    const label = makeLabel(name, {
+      size: DETENT_LABELS.keySize,
+      color: DETENT_LABEL,
+      weight: 700,
+    });
     label.position.set(Math.sin(angle) * rad, Math.cos(angle) * rad, 0.0045);
     base.root.add(label);
   });
@@ -403,6 +487,10 @@ function makeKey(def: KeyControl): ControlObject {
   // Key blade sticking out of the barrel.
   barrel.add(box(r * 0.22, r * 1.25, r * 0.06, MAT.frame(), [0, r * 0.62, r * 0.6]));
   barrel.add(box(r * 0.55, r * 0.7, r * 0.08, MAT.frame(), [0, r * 1.45, r * 0.6]));
+  // A painted index down the blade. Unlike the selector the key has no arm
+  // to read at a glance, so which detent it is standing at came down to
+  // squinting at a dark blade against a dark plate.
+  barrel.add(box(r * 0.12, r * 1.5, 0.0012, markingMaterial(), [0, r * 0.85, r * 0.65]));
 
   const hit = cylinder(r * 1.5, r * 1.5, 0.03, hitProxyMaterial(), 12);
   hit.rotation.x = Math.PI / 2;
@@ -540,3 +628,4 @@ function makeWheel(def: WheelControl): ControlObject {
     release: () => null,
   };
 }
+

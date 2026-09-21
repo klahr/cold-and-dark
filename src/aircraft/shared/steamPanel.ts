@@ -47,84 +47,115 @@ export interface SteamPanelOptions {
  */
 const STACK_X = 0.085;
 const STACK_W = 0.16;
+/**
+ * Top of the rack, and the trim gap between units bolted into it.
+ *
+ * The stack is laid out from these rather than each box being given its own
+ * y. Hand-placed, the gaps had drifted to 3, 5, 2, 11 and 11 mm — the top
+ * four almost touching while the bottom two floated — which is not what a
+ * rack of avionics looks like from the left seat.
+ */
+const STACK_TOP = 0.236;
+const STACK_GAP = 0.004;
 
-const RADIO_STACK: readonly InstrumentDef[] = [
+interface StackSpec {
+  id: string;
+  label: string;
+  /** Everything `radioUnit` needs, including the unit's own proportions. */
+  unit: Parameters<typeof radioUnit>[0];
+}
+
+/**
+ * Where each unit ended up, for the panel-fit test. An `InstrumentDef`
+ * carries the rack width but not the unit's own height, so the only way to
+ * check the stack's spacing from outside is to say what it worked out.
+ */
+export interface RackedUnit {
+  id: string;
+  /** Centre, in panel coordinates. */
+  y: number;
+  height: number;
+}
+
+export const RADIO_STACK_LAYOUT: RackedUnit[] = [];
+
+/** Stacks the units downward from `STACK_TOP`, each under the last. */
+function rackedStack(specs: readonly StackSpec[]): InstrumentDef[] {
+  let top = STACK_TOP;
+  return specs.map(({ id, label, unit }) => {
+    const height = STACK_W * unit.aspect;
+    const y = top - height / 2;
+    top -= height + STACK_GAP;
+    RADIO_STACK_LAYOUT.push({ id, y, height });
+    return { id, label, mount: { x: STACK_X, y }, size: STACK_W, build: radioUnit(unit) };
+  });
+}
+
+const RADIO_STACK: readonly InstrumentDef[] = rackedStack([
   {
     id: 'audioPanel',
     label: 'Audio panel',
-    mount: { x: STACK_X, y: 0.212 },
-    size: STACK_W,
-    build: radioUnit({
+    unit: {
       model: 'KMA 24',
       rows: [{ label: 'AUDIO', active: 'COM 1', standby: 'SPKR' }],
       aspect: 0.3,
       knobs: 1,
-    }),
+    },
   },
   {
     id: 'com1',
     label: 'COM/NAV 1',
-    mount: { x: STACK_X, y: 0.143 },
-    size: STACK_W,
-    build: radioUnit({
+    unit: {
       model: 'KX 155',
       rows: [
         { label: 'COM', active: '118.30', standby: '121.90' },
         { label: 'NAV', active: '113.40', standby: '110.20' },
       ],
       aspect: 0.52,
-    }),
+    },
   },
   {
     id: 'com2',
     label: 'COM/NAV 2',
-    mount: { x: STACK_X, y: 0.055 },
-    size: STACK_W,
-    build: radioUnit({
+    unit: {
       model: 'KX 155',
       rows: [
         { label: 'COM', active: '122.80', standby: '119.10' },
         { label: 'NAV', active: '108.60', standby: '112.00' },
       ],
       aspect: 0.52,
-    }),
+    },
   },
   {
     id: 'adf',
     label: 'ADF receiver',
-    mount: { x: STACK_X, y: -0.013 },
-    size: STACK_W,
-    build: radioUnit({
+    unit: {
       model: 'KR 87',
       rows: [{ label: 'ADF', active: '0350', standby: 'ANT' }],
       aspect: 0.3,
-    }),
+    },
   },
   {
     id: 'transponder',
     label: 'Transponder',
-    mount: { x: STACK_X, y: -0.072 },
-    size: STACK_W,
-    build: radioUnit({
+    unit: {
       model: 'KT 76A',
       rows: [{ label: 'XPDR', active: '1200', standby: 'SBY' }],
       aspect: 0.3,
       knobs: 3,
-    }),
+    },
   },
   {
     id: 'elt',
     label: 'ELT remote',
-    mount: { x: STACK_X, y: -0.128 },
-    size: STACK_W,
-    build: radioUnit({
+    unit: {
       model: 'ELT',
       rows: [{ label: 'ARM', active: 'ARMED' }],
       aspect: 0.26,
       knobs: 1,
-    }),
+    },
   },
-];
+]);
 
 export function steamGaugePanel(opts: SteamPanelOptions): readonly InstrumentDef[] {
   const tank = opts.systems.fuel.tankLitres;

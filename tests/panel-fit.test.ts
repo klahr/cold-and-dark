@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { AIRCRAFT } from '../src/aircraft/registry';
 import { PANEL_HALF_H } from '../src/render/frame';
 import { discFitsPanel, panelHalfWidthAt } from '../src/render/panelShape';
+import { detentReach } from '../src/render/ControlObject';
+import { RADIO_STACK_LAYOUT } from '../src/aircraft/shared/steamPanel';
 
 /**
  * The panel has to fit inside the cabin, and everything on the panel has to
@@ -97,4 +99,92 @@ describe('panel fits the cabin', () => {
       });
     });
   }
+});
+
+/**
+ * A rotary is as wide as its lettering, not as wide as its knob.
+ *
+ * The checks above measure controls by their own radius, which says nothing
+ * about the ring of position names around a selector or an ignition switch.
+ * Those were made larger and brighter to be readable in the shadow under the
+ * panel, and growing them is exactly the change that pushes them off the
+ * edge or onto a neighbour without anything failing.
+ */
+describe('rotary lettering', () => {
+  for (const aircraft of AIRCRAFT) {
+    const rotaries = aircraft.controls.filter(
+      (c): c is Extract<typeof c, { kind: 'selector' | 'key' }> =>
+        (c.kind === 'selector' || c.kind === 'key') &&
+        (c.mount.frame ?? 'panel') === 'panel',
+    );
+
+    it(`${aircraft.id}: detent names stay on the panel`, () => {
+      for (const control of rotaries) {
+        const reach = detentReach(control);
+        expect(
+          Math.abs(control.mount.x) + reach,
+          `${control.id} reaches ${(Math.abs(control.mount.x) + reach).toFixed(3)}`,
+        ).toBeLessThanOrEqual(panelHalfWidthAt(control.mount.y));
+      }
+    });
+
+    it(`${aircraft.id}: detent names do not run into a neighbouring control`, () => {
+      for (const control of rotaries) {
+        const reach = detentReach(control);
+        for (const other of aircraft.controls) {
+          if (other.id === control.id) continue;
+          if ((other.mount.frame ?? 'panel') !== 'panel') continue;
+          const gap = Math.hypot(
+            other.mount.x - control.mount.x,
+            other.mount.y - control.mount.y,
+          );
+          expect(gap, `${control.id} lettering overlaps ${other.id}`).toBeGreaterThan(reach * 0.62);
+        }
+      }
+    });
+  }
+});
+
+
+/**
+ * The radio stack is a rack of boxes bolted one under the next, so the gaps
+ * between them have to be equal — and hand-placed they had drifted to 3, 5,
+ * 2, 11 and 11 mm: the top four almost touching while the bottom two
+ * floated. Each unit's height comes from its own proportions, so this is
+ * exactly the sort of thing that goes quietly wrong again when one is added.
+ */
+describe('radio stack', () => {
+  it('stacks six units in one column', () => {
+    expect(RADIO_STACK_LAYOUT.length).toBe(6);
+    const instruments = AIRCRAFT[0]!.instruments;
+    const inStack = instruments.filter((i) => RADIO_STACK_LAYOUT.some((u) => u.id === i.id));
+    expect(inStack.length).toBe(6);
+    expect(new Set(inStack.map((i) => i.mount.x)).size).toBe(1);
+    expect(new Set(inStack.map((i) => i.size)).size).toBe(1);
+  });
+
+  it('leaves the same gap between every unit', () => {
+    const ordered = [...RADIO_STACK_LAYOUT].sort((a, b) => b.y - a.y);
+    const gaps: number[] = [];
+    for (let i = 1; i < ordered.length; i++) {
+      const above = ordered[i - 1]!;
+      const below = ordered[i]!;
+      gaps.push(above.y - above.height / 2 - (below.y + below.height / 2));
+    }
+    const printed = gaps.map((g) => (g * 1000).toFixed(1)).join(', ');
+    for (const gap of gaps) {
+      expect(gap, `gaps: ${printed} mm`).toBeCloseTo(gaps[0]!, 6);
+      // Bolted into a rack, not scattered down the panel.
+      expect(gap, `gaps: ${printed} mm`).toBeGreaterThan(0);
+      expect(gap, `gaps: ${printed} mm`).toBeLessThan(0.008);
+    }
+  });
+
+  it('keeps the whole rack on the panel', () => {
+    const ordered = [...RADIO_STACK_LAYOUT].sort((a, b) => b.y - a.y);
+    const top = ordered[0]!;
+    const bottom = ordered[ordered.length - 1]!;
+    expect(top.y + top.height / 2).toBeLessThan(PANEL_HALF_H);
+    expect(bottom.y - bottom.height / 2).toBeGreaterThan(-PANEL_HALF_H);
+  });
 });

@@ -12,6 +12,8 @@
   "scripts": {
     "dev": "vite",
     "dev:proxy": "vite --mode proxy",
+    "dev:proxy:tls": "vite --mode proxy-tls",
+    "dev:tls": "vite --mode lan-tls",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.1"

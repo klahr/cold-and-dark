@@ -23,7 +23,11 @@ const SWITCH_Y = -0.157;
 const KNOB_Y = -0.226;
 
 export const C172S_CONTROLS: readonly ControlDef[] = [
-  ignitionKey(-0.430, -0.168),
+  // A little inboard of where it was. The ring of OFF/R/L/BOTH/START around
+  // it ran off the edge of the panel and into the lining — invisible from
+  // the seat, and part of why the switch was hard to read. It cannot come in
+  // much further than this without the lettering reaching the master switch.
+  ignitionKey(-0.420, -0.168),
   ...masterRocker(-0.386, SWITCH_Y),
   {
     id: 'avionicsMaster',

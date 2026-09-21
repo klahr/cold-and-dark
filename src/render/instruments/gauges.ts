@@ -287,13 +287,16 @@ export function attitudeIndicator() {
     return {
       object: group,
       update(sim) {
-        const spool = sim.vacuum.gyroSpool;
-        flag.visible = spool < 0.9;
-        // A gyro that is not up to speed topples: the horizon drifts down
-        // and rolls off level until suction brings it back.
-        const droop = (1 - spool) * r * 0.5;
-        cardHolder.position.y = -droop;
-        cardHolder.rotation.z = (1 - spool) * 0.45;
+        // The flag is about rotor speed, not about being level: it drops out
+        // while the horizon still has degrees to go, which is what it does
+        // in the aeroplane.
+        flag.visible = sim.vacuum.gyroSpool < 0.9;
+
+        // The pitch ladder above is drawn at `size * 0.016` texture pixels
+        // per degree on a card `2r` across, so a degree is this far.
+        const perDegree = r * 0.032;
+        cardHolder.position.y = -sim.vacuum.attitudePitchError * perDegree;
+        cardHolder.rotation.z = (sim.vacuum.attitudeBankError * Math.PI) / 180;
       },
     };
   };

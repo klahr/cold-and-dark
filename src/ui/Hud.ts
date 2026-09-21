@@ -13,6 +13,35 @@ import { QUALITY_LEVELS, type QualityLevel } from '../render/postfx';
 import { VIEW_PRESETS } from '../input/SeatedCamera';
 import type { ControlDescription } from './describeControl';
 import type { HudCallbacks, TrainerHud } from './TrainerHud';
+import type { VrSupport } from '../input/VrSession';
+import { windowChecklist, type VrCardContent } from './VrChecklistCard';
+
+/**
+ * What the VR button says in each state. "VR unavailable" for all of them
+ * was actively misleading in the case that actually happens: a headset
+ * browser on a plain-http page, where the hardware is right there and the
+ * only problem is the URL.
+ */
+const VR_BUTTON_COPY: Record<VrSupport, { label: string; title: string }> = {
+  available: {
+    label: 'Enter VR',
+    title: 'Fly the cockpit in a headset. Trigger to operate a control.',
+  },
+  'insecure-context': {
+    label: 'VR needs HTTPS',
+    title:
+      'WebXR is only exposed on a secure origin, so this page cannot see the headset. ' +
+      'Open the same page over https (or through localhost) and the button will come alive.',
+  },
+  'no-webxr': {
+    label: 'No WebXR here',
+    title: 'This browser has no WebXR support. Try the headset browser, or Chrome or Edge.',
+  },
+  'no-headset': {
+    label: 'VR unavailable',
+    title: 'WebXR is available, but no device offering an immersive session was found.',
+  },
+};
 
 const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -275,17 +304,60 @@ export class Hud implements TrainerHud {
   /* Public surface                                                      */
   /* ------------------------------------------------------------------ */
 
+  /**
+   * The wrist board in VR. It obeys the same coaching rules as the flat
+   * panel: a hard-mode timed run gets the callout and nothing else, because
+   * a board on your wrist would otherwise be a way round the difficulty.
+   */
+  vrCardContent(): VrCardContent {
+    const pos = this.checklist.position;
+    const coaching = this.coaching;
+    const total = this.checklist.allSections.reduce((n, s) => n + s.items.length, 0);
+    const done = Math.round(this.checklist.progress * total);
+
+    if (!pos) {
+      return {
+        theme: 'expert',
+        glyph: '',
+        title: this.aircraft.name,
+        section: '',
+        headline: 'Checklist complete',
+        detail: 'The engine is running and the alternator is charging.',
+        hint: '',
+        progress: 1,
+        stepLabel: `${total} / ${total}`,
+        items: [],
+        finished: true,
+      };
+    }
+
+    return {
+      theme: 'expert',
+      glyph: '',
+      title: this.aircraft.name,
+      section: coaching.showList ? pos.section.title : '',
+      headline: pos.item.callout,
+      detail: coaching.showCoaching ? pos.item.why : '',
+      hint: coaching.showCoaching ? pos.item.hint : '',
+      progress: this.checklist.progress,
+      stepLabel: `${done} / ${total}`,
+      items: coaching.showList
+        ? windowChecklist(this.checklist, (item) => ({ text: item.callout }))
+        : [],
+      finished: false,
+    };
+  }
+
   setActiveView(index: number): void {
     this.viewButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(i === index)));
   }
 
-  setVrSupport(support: 'unsupported' | 'available'): void {
-    const available = support === 'available';
-    this.vrBtn.disabled = !available;
-    this.vrBtn.textContent = available ? 'Enter VR' : 'VR unavailable';
-    this.vrBtn.title = available
-      ? 'Fly the cockpit in a headset. Trigger to operate a control.'
-      : 'No WebXR headset was detected in this browser.';
+  setVrSupport(support: VrSupport): void {
+    this.vrBtn.disabled = support !== 'available';
+    const { label, title } = VR_BUTTON_COPY[support];
+    this.vrBtn.textContent = label;
+    this.vrBtn.title = title;
+    this.vrBtn.classList.toggle('vr-blocked', support === 'insecure-context');
   }
 
   setVrPresenting(presenting: boolean): void {

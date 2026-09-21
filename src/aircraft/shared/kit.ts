@@ -1,10 +1,26 @@
 import type { ControlDef, ToggleControl } from '../types';
+import { ARMREST, CABIN } from '../../render/frame';
 
 /**
  * Panel furniture that is the same on every light single: a row of paddle
  * light switches, a bank of circuit breakers, the split master rocker.
  * Aircraft definitions compose these rather than repeating the geometry.
  */
+
+/**
+ * The door handle sits above the armrest, where a 172's does — and, more to
+ * the point, out of it. At armrest height no amount of moving it inboard
+ * helped: it was inside the armrest box either way, which looks exactly like
+ * being sunk into the door.
+ */
+const DOOR_HANDLE_Y = ARMREST.y + ARMREST.height / 2 + 0.08;
+/**
+ * How far in from the nominal cabin half-width the handle's base sits. Small:
+ * the base belongs against the lining, with the paddle body protruding into
+ * the cabin from it. The lofted wall is a little outboard of the nominal
+ * figure here, so this leaves about 12 mm of true clearance.
+ */
+const DOOR_INSET = 0.006;
 
 /** A single paddle switch, as used for the exterior lights. */
 export function paddleSwitch(
@@ -155,6 +171,8 @@ export function trimWheel(): ControlDef {
  * timed run is only meaningful if the actions are real.
  */
 export function cabinItems(pilotX: number): ControlDef[] {
+  const side = Math.sign(pilotX) || -1;
+
   return [
     {
       id: 'seatLatch',
@@ -190,24 +208,18 @@ export function cabinItems(pilotX: number): ControlDef[] {
       label: 'Cabin door latch',
       tooltip:
         'A 172 door that pops open on climb-out is startling and hard to close in flight. Latch it.',
-      mount: { x: pilotX - 0.24, y: 0.55, z: -0.05, frame: 'cabin', yaw: Math.PI / 2 },
+      // Above the armrest, base against the lining, body protruding into
+      // the cabin.
+      mount: {
+        x: side * (CABIN.halfWidth - DOOR_INSET),
+        y: DOOR_HANDLE_Y,
+        z: -0.05,
+        frame: 'cabin',
+        yaw: Math.PI / 2,
+      },
       width: 0.055,
       height: 0.03,
       color: 0x8b9099,
-    },
-    {
-      id: 'controlLock',
-      kind: 'pushPull',
-      label: 'Control lock',
-      tooltip:
-        'A pin through the control column that stops the controls moving on the ground. It has to come out before flight — and it is right in front of the ignition key for exactly that reason.',
-      mount: { x: pilotX, y: 0.665, z: -0.47, frame: 'cabin' },
-      color: 0xc43a2e,
-      knobRadius: 0.013,
-      travel: 0.06,
-      shape: 'ring',
-      // Installed when the aeroplane is found cold and dark.
-      initial: 1,
     },
   ];
 }

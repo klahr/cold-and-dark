@@ -19,17 +19,20 @@ const PROXY_HOST = 'dev.klahr.se';
  * | `proxy-tls` | `npm run dev:proxy:tls` | :8080, behind nginx on https  |
  * | `lan-tls`   | `npm run dev:tls`     | https://<lan ip>:8443, directly |
  *
- * `lan-tls` exists for WebXR. `navigator.xr` is `[SecureContext]`, so on a
- * plain-http origin a headset browser cannot see the headset at all — the
- * API is absent, not merely unusable. Serving TLS straight off this machine
- * with a throwaway certificate is the shortest path to a secure origin that
- * does not involve changing the nginx box. The headset will warn about the
- * certificate once; accepting it yields a genuinely secure context, which is
- * all WebXR is asking for.
+ * `proxy-tls` is the one to use: dev.klahr.se now carries a certificate and
+ * redirects http to https, so the browser's origin is secure and WebXR is
+ * available there. This matters because `navigator.xr` is `[SecureContext]`
+ * — on a plain-http origin a headset browser cannot see the headset at all,
+ * the API being absent rather than merely unusable. Vite itself still speaks
+ * plain http on 8080; nginx terminates the TLS. The only thing the mode
+ * changes is where the HMR client dials, and getting that wrong under
+ * `proxy` (ws on :80, from an https page) is a blocked mixed-content socket
+ * and edits that go unnoticed until a manual reload.
  *
- * `proxy-tls` is the real fix, for once that vhost has a certificate: then
- * dev.klahr.se works in a headset and everything below collapses back to one
- * sensible arrangement.
+ * Plain `proxy` is therefore only right if that vhost ever loses its
+ * certificate. `lan-tls` predates the certificate: it serves TLS straight
+ * off this machine with a throwaway cert, which the headset warns about
+ * once. It stays useful for working without the nginx box in the path.
  */
 export default defineConfig(({ mode }) => {
   const behindProxy = mode === 'proxy' || mode === 'proxy-tls';

@@ -5,7 +5,15 @@ import { ChecklistRunner } from '../../sim/Checklist';
 import type { ControlDescription, HudCallbacks } from '../overlay';
 import { windowChecklist, type VrCardContent } from '../VrChecklistCard';
 import type { VrSupport } from '../../input/VrSession';
-import { KID_FAULTS, KID_PRAISE, KID_UI, kidStep, sectionName, type KidStep } from './swedish';
+import {
+  KID_FAULTS,
+  KID_PRAISE,
+  KID_UI,
+  KID_UNKNOWN_STEP,
+  kidStep,
+  sectionName,
+  type KidStep,
+} from './swedish';
 import { downloadChecklistSheet, stepNumbers } from './checklistSheet';
 import { el } from './dom';
 
@@ -13,12 +21,7 @@ import { el } from './dom';
 const STUCK_AFTER = 15;
 
 /** Fallback copy, so an untranslated item is still actionable rather than blank. */
-const UNKNOWN: KidStep = {
-  icon: '✈️',
-  title: 'Nästa steg',
-  action: 'Titta på den sak som lyser i cockpiten och klicka på den.',
-  why: 'Varje steg gör planet lite mer redo att flyga.',
-};
+const UNKNOWN: KidStep = KID_UNKNOWN_STEP;
 
 
 /**
@@ -572,14 +575,14 @@ export class KidHud {
 
   private onItemComplete(item: ChecklistItem): void {
     const step = kidStep(item.id) ?? UNKNOWN;
-    const praise = KID_PRAISE[this.praiseIndex % KID_PRAISE.length] ?? 'Bra jobbat!';
+    const praise = KID_PRAISE[this.praiseIndex % KID_PRAISE.length] ?? KID_PRAISE[0] ?? '';
     this.praiseIndex += 1;
     this.toast('done', '⭐', praise, step.title);
   }
 
   private onFault(fault: Fault): void {
     const kid = KID_FAULTS[fault.code];
-    this.toast('oops', '💡', `Oj då! ${kid.title}`, kid.message);
+    this.toast('oops', '💡', KID_UI.faultToast(kid.title), kid.message);
   }
 
   /**

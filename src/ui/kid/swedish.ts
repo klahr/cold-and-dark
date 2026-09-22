@@ -363,14 +363,51 @@ export const KID_UI = {
   stepOf: (n: number, total: number) => `Steg ${n} av ${total}`,
   stuck: 'Fastnat? Tryck på "Var är den?" så visar jag.',
   allDone: 'Klart! Planet är avstängt och sover.',
-  goalKicker: 'MOTORN GÅR!',
   goalTitle: 'Du startade flygplanet!',
-  goalBody: 'Precis som en riktig pilot. Vill du stänga av det också?',
-  goalContinue: 'Ja, stäng av planet',
-  goalAgain: '↺ Starta en gång till',
+  /* Where the child is left once the engine is running: nothing is being
+     asked of them, and the shutdown is a button rather than a next step. */
+  runningTitle: 'Motorn går!',
+  runningBody: 'Sitt kvar och lek så länge du vill.',
+  shutdown: 'Stäng av planet',
+  notYetShutdown: 'Tryck på "Stäng av planet" först.',
   wrongControl: (wanted: string) => `Inte den än! Först ska du: ${wanted}.`,
   alreadyDone: 'Den är klar! Den ska stå kvar så.',
+  print: 'Skriv ut listan',
+  paper: 'Pappersläge',
+  paperOn: 'Pappersläge på — listan står på pappret',
+  paperHint: 'Läs på pappret. Här står bara vilket steg du är på.',
 } as const;
+
+/**
+ * The printed sheet.
+ *
+ * Paper mode takes the words off the screen, so the paper has to carry
+ * everything the card would have said — including the reason, which on
+ * screen lives behind the *Varför då?* button and on paper has nowhere else
+ * to be.
+ */
+export const KID_SHEET = {
+  /** The aeroplane's own name is the heading; this says what the sheet is. */
+  subtitle: 'Checklista — starta flygplanet!',
+  howTo:
+    'Gör ett steg i taget, uppifrån och ner. Kryssa i rutan när steget är klart. Siffran här är samma siffra som står på skärmen.',
+  why: 'Varför:',
+  /**
+   * Under the heading, once. It is on the sheet at all because a printed
+   * page headed with an aeroplane's name and a column of tick boxes looks
+   * exactly like the real thing.
+   */
+  disclaimer:
+    'Det här är en leksak för att lära sig med — inte en riktig checklista. Ett riktigt flygplan flygs efter sin egen POH.',
+  fileName: (aircraftId: string) => `checklista-${aircraftId}.pdf`,
+} as const;
+
+/** Section headings, in the same plain Swedish as the steps. */
+export function sectionName(sectionId: string): string {
+  if (sectionId === 'before-start') return KID_UI.sectionBefore;
+  if (sectionId === 'shutdown') return KID_UI.sectionSecure;
+  return KID_UI.sectionStart;
+}
 
 /** Rotated so the hundredth tick still feels like someone noticed. */
 export const KID_PRAISE: readonly string[] = [

@@ -169,12 +169,12 @@ describe('shouldReveal', () => {
 describe('the wrist board’s help button', () => {
   installCanvasStub();
 
-  function content(help: string): VrCardContent {
+  function content(button: string): VrCardContent {
     return {
       glyph: '\u{1F39B}\uFE0F',
       headline: 'Blandning — full',
       detail: 'Dra spaken hela vägen in.',
-      help,
+      button,
       progress: 0.2,
       stepLabel: '5 / 25',
       items: [],
@@ -188,20 +188,20 @@ describe('the wrist board’s help button', () => {
     const card = new VrChecklistCard();
 
     card.update(0.5, camera, content('Show me'));
-    expect(card.helpTarget.visible).toBe(true);
+    expect(card.buttonTarget.visible).toBe(true);
 
     card.update(0.5, camera, content(''));
-    expect(card.helpTarget.visible).toBe(false);
+    expect(card.buttonTarget.visible).toBe(false);
 
     // And a board that is not up at all offers nothing, whatever it last drew.
     card.update(0.5, camera, null);
-    expect(card.helpOffered).toBe(false);
+    expect(card.buttonOffered).toBe(false);
   });
 
   it('puts the hit plane exactly where the button is drawn', async () => {
     const { VrChecklistCard, HELP_BUTTON } = await import('../src/ui/VrChecklistCard');
     const card = new VrChecklistCard();
-    const geometry = card.helpTarget.geometry as THREE.PlaneGeometry;
+    const geometry = card.buttonTarget.geometry as THREE.PlaneGeometry;
 
     // The board is 0.18 m across and drawn on a 768 px canvas, so the plane
     // should measure the button's pixels at that scale.
@@ -213,8 +213,8 @@ describe('the wrist board’s help button', () => {
     // plane and the paint come from the same rectangle, so this is a
     // round trip rather than a restatement.
     const boardHeight = 0.18 * (960 / 768);
-    expect(card.helpTarget.position.x).toBeCloseTo(0, 6);
-    expect(card.helpTarget.position.y).toBeCloseTo(
+    expect(card.buttonTarget.position.x).toBeCloseTo(0, 6);
+    expect(card.buttonTarget.position.y).toBeCloseTo(
       boardHeight / 2 - (HELP_BUTTON.y + HELP_BUTTON.h / 2) * metresPerPx,
       6,
     );

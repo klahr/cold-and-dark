@@ -23,6 +23,7 @@ export class ChecklistRunner {
   private sectionIndex = 0;
   private itemIndex = 0;
   private satisfiedFor = 0;
+  private held = false;
   private readonly done = new Set<string>();
   private readonly listeners = new Set<(item: ChecklistItem) => void>();
 
@@ -38,7 +39,8 @@ export class ChecklistRunner {
     );
   }
 
-  get position(): ChecklistPosition | null {
+  /** Where the cursor stands, whether or not the list is asking for it. */
+  private get cursor(): ChecklistPosition | null {
     const section = this.sections[this.sectionIndex];
     if (!section) return null;
     const item = section.items[this.itemIndex];
@@ -46,8 +48,37 @@ export class ChecklistRunner {
     return { section, item, sectionIndex: this.sectionIndex, itemIndex: this.itemIndex };
   }
 
+  /**
+   * The step being asked for, or null while the list is holding or done.
+   *
+   * Null during the hold on purpose: nothing should tick off, no arrow should
+   * arm and no step should be on screen while the aeroplane is simply sitting
+   * there running.
+   */
+  get position(): ChecklistPosition | null {
+    return this.held ? null : this.cursor;
+  }
+
+  /**
+   * True once the aeroplane is started and before the shutdown has been
+   * asked for.
+   *
+   * Starting an engine and stopping one are two decisions, not one long
+   * procedure. Running the list straight on into the shutdown made the
+   * reward for getting it going a fresh instruction to turn it all off, so
+   * the list stops at the boundary and waits to be asked.
+   */
+  get holding(): boolean {
+    return this.held;
+  }
+
+  /** Begins the shutdown. Nothing else releases the hold. */
+  release(): void {
+    this.held = false;
+  }
+
   get finished(): boolean {
-    return this.position === null;
+    return !this.held && this.cursor === null;
   }
 
   /**
@@ -98,6 +129,9 @@ export class ChecklistRunner {
    */
   isLocked(controlId: string): boolean {
     if (!this.managed.has(controlId)) return false;
+    // Between the start and the shutdown there is no live step, so without
+    // this the cockpit would go dead the moment the engine came alive.
+    if (this.held && this.sim.definition.freePlayControls?.includes(controlId)) return false;
     const item = this.position?.item;
     if (item && itemControls(item).includes(controlId)) return false;
     // A mistake that needs a locked control to put right would otherwise be
@@ -152,6 +186,7 @@ export class ChecklistRunner {
     this.sectionIndex = 0;
     this.itemIndex = 0;
     this.satisfiedFor = 0;
+    this.held = false;
     this.done.clear();
   }
 
@@ -185,10 +220,14 @@ export class ChecklistRunner {
     if (!section) return;
     if (this.itemIndex + 1 < section.items.length) {
       this.itemIndex += 1;
-    } else {
-      this.sectionIndex += 1;
-      this.itemIndex = 0;
+      return;
     }
+    this.sectionIndex += 1;
+    this.itemIndex = 0;
+    // Everything the aeroplane was started for is done. Stopping it again is
+    // the pilot's own decision, so the list waits here until it is asked.
+    const next = this.sections[this.sectionIndex];
+    if (next?.phase === 'secure' && section.phase !== 'secure') this.held = true;
   }
 }
 

@@ -5,7 +5,8 @@ import { ChecklistRunner } from '../../sim/Checklist';
 import type { ControlDescription, HudCallbacks } from '../overlay';
 import { windowChecklist, type VrCardContent } from '../VrChecklistCard';
 import type { VrSupport } from '../../input/VrSession';
-import { KID_FAULTS, KID_PRAISE, KID_UI, kidStep, type KidStep } from './swedish';
+import { KID_FAULTS, KID_PRAISE, KID_UI, kidStep, sectionName, type KidStep } from './swedish';
+import { downloadChecklistSheet, stepNumbers } from './checklistSheet';
 
 /** Seconds on one step before the UI offers to point at the control. */
 const STUCK_AFTER = 15;
@@ -60,16 +61,30 @@ export class KidHud {
   private readonly stuckEl: HTMLElement;
   private readonly whyBtn: HTMLButtonElement;
   private readonly showBtn: HTMLButtonElement;
+  private readonly shutdownBtn: HTMLButtonElement;
   private readonly cardEl: HTMLElement;
   private readonly fillEl: HTMLElement;
   private readonly planeEl: HTMLElement;
   private readonly toastsEl: HTMLElement;
   private readonly tooltipEl: HTMLElement;
+  /** The confetti layer. Nothing in it can be clicked. */
   private readonly finishEl: HTMLElement;
   private readonly soundBtn: HTMLButtonElement;
   private readonly vrBtn: HTMLButtonElement;
+  private readonly paperBtn: HTMLButtonElement;
+  private readonly stepNoEl: HTMLElement;
 
+  private readonly aircraft: AircraftDefinition;
+  private readonly numbers: Map<string, number>;
   private readonly totalItems: number;
+  /**
+   * The list is on paper, so the screen stops being a place to read.
+   *
+   * A child reading a step off the screen is looking at the screen, and
+   * everything worth looking at is in the cockpit. With the sheet printed
+   * out, the card has one job left: saying which row of it you are on.
+   */
+  private paperMode = false;
   private lastItemId: string | null = null;
   private itemAge = 0;
   private praiseIndex = 0;
@@ -86,6 +101,8 @@ export class KidHud {
   ) {
     this.sim = sim;
     this.callbacks = callbacks;
+    this.aircraft = aircraft;
+    this.numbers = stepNumbers(aircraft);
     this.checklist = new ChecklistRunner(aircraft.checklists, sim);
     this.totalItems = aircraft.checklists.reduce((n, s) => n + s.items.length, 0);
 
@@ -107,6 +124,12 @@ export class KidHud {
     );
     tools.append(this.soundBtn);
     tools.append(this.toolButton('↺', KID_UI.reset, () => this.callbacks.onReset()));
+    // Printing is a grown-up's errand, so it sits with the other grown-up
+    // buttons rather than anywhere near the step.
+    tools.append(this.toolButton('🖨️', KID_UI.print, () => downloadChecklistSheet(this.aircraft)));
+    this.paperBtn = this.toolButton('📄', KID_UI.paper, () => this.setPaperMode(!this.paperMode));
+    this.paperBtn.setAttribute('aria-pressed', 'false');
+    tools.append(this.paperBtn);
     // Hidden until a headset is actually there. A disabled button explaining
     // a certificate problem is noise to a six-year-old, and the reasons a
     // headset might be unavailable are a grown-up's problem.
@@ -130,9 +153,14 @@ export class KidHud {
     this.cardEl = el('section', 'kid-card');
     this.chipEl = el('div', 'kid-chip');
     const head = el('div', 'kid-head');
+    // Drawn only in paper mode. Not a count of how far there is to go — the
+    // reason there is no "3 / 24" anywhere on this screen — but the number
+    // printed beside the same step on the sheet, so a child can find their
+    // place on the paper without reading a word of it.
+    this.stepNoEl = el('div', 'kid-stepno');
     this.iconEl = el('div', 'kid-icon');
     this.titleEl = el('h2', 'kid-what');
-    head.append(this.iconEl, this.titleEl);
+    head.append(this.stepNoEl, this.iconEl, this.titleEl);
     this.actionEl = el('p', 'kid-action');
 
     const acts = el('div', 'kid-acts');
@@ -144,12 +172,27 @@ export class KidHud {
     this.whyBtn.addEventListener('click', () => this.toggleWhy());
     acts.append(this.showBtn, this.whyBtn);
 
+    // Its own row rather than one of the two step buttons, because those go
+    // away in paper mode and this is the only way out of a running aeroplane.
+    this.shutdownBtn = el('button', 'kid-shutdown', KID_UI.shutdown);
+    this.shutdownBtn.type = 'button';
+    this.shutdownBtn.hidden = true;
+    this.shutdownBtn.addEventListener('click', () => this.startShutdown());
+
     this.whyEl = el('p', 'kid-why');
     this.whyEl.hidden = true;
     this.stuckEl = el('p', 'kid-stuck', KID_UI.stuck);
     this.stuckEl.hidden = true;
 
-    this.cardEl.append(this.chipEl, head, this.actionEl, acts, this.whyEl, this.stuckEl);
+    this.cardEl.append(
+      this.chipEl,
+      head,
+      this.actionEl,
+      acts,
+      this.shutdownBtn,
+      this.whyEl,
+      this.stuckEl,
+    );
     this.root.append(this.cardEl);
 
     /* --------------------------- transient ---------------------------- */
@@ -194,7 +237,8 @@ export class KidHud {
     // Not once they have asked: the nudge exists to offer the button, and
     // going on offering it after it has been pressed reads as the screen not
     // noticing.
-    const stuck = pos !== null && !this.helpShown && this.itemAge > STUCK_AFTER;
+    const stuck =
+      pos !== null && !this.paperMode && !this.helpShown && this.itemAge > STUCK_AFTER;
     if (stuck === this.stuckEl.hidden) {
       this.stuckEl.hidden = !stuck;
       this.showBtn.classList.toggle('nudge', stuck);
@@ -206,6 +250,26 @@ export class KidHud {
     }
   }
 
+  /**
+   * Turns the on-screen words off.
+   *
+   * Only the screen: in a headset the wrist board keeps its full step, since
+   * the premise of paper mode is a sheet in your hand and both of your hands
+   * are holding controllers.
+   */
+  setPaperMode(on: boolean): void {
+    if (on === this.paperMode) return;
+    this.paperMode = on;
+    this.root.classList.toggle('paper', on);
+    this.paperBtn.setAttribute('aria-pressed', String(on));
+    const name = on ? KID_UI.paperOn : KID_UI.paper;
+    this.paperBtn.setAttribute('aria-label', name);
+    this.paperBtn.title = name;
+    // Said once, when it changes, rather than printed under every step.
+    if (on) this.toast('wait', '📄', KID_UI.paperHint, '');
+    this.render();
+  }
+
   reset(): void {
     this.checklist.restart();
     this.lastItemId = null;
@@ -213,6 +277,7 @@ export class KidHud {
     this.helpShown = false;
     this.celebrated = false;
     this.finishEl.hidden = true;
+    this.finishEl.replaceChildren();
     this.toastsEl.replaceChildren();
     this.render();
   }
@@ -229,6 +294,12 @@ export class KidHud {
    * only one of them is good news.
    */
   onBlocked(id: string): void {
+    // Nothing is being asked for during the hold, so there is no "first do
+    // this" to point at — only the button that starts the shutdown.
+    if (this.checklist.holding) {
+      this.toast('wait', '🕐', KID_UI.notYetShutdown, '');
+      return;
+    }
     const reason = this.checklist.lockReason(id);
     if (reason === 'done') {
       this.toast('wait', '✅', KID_UI.alreadyDone, '');
@@ -294,12 +365,27 @@ export class KidHud {
     const pos = this.checklist.position;
     const done = Math.round(this.checklist.progress * this.totalItems);
 
+    // Running, with nothing being asked for. The board's one button becomes
+    // the way out, because in a headset there is no other button anywhere.
+    if (this.checklist.holding) {
+      return {
+        glyph: '\u{1F389}',
+        headline: KID_UI.runningTitle,
+        detail: KID_UI.runningBody,
+        button: KID_UI.shutdown,
+        progress: this.checklist.progress,
+        stepLabel: KID_UI.stepOf(done, this.totalItems),
+        items: [],
+        finished: false,
+      };
+    }
+
     if (!pos) {
       return {
         glyph: '\u{1F634}',
         headline: KID_UI.allDone,
         detail: '',
-        help: '',
+        button: '',
         progress: 1,
         stepLabel: `${this.totalItems} / ${this.totalItems}`,
         items: [],
@@ -316,9 +402,10 @@ export class KidHud {
       glyph: step.icon,
       headline: step.title,
       detail: step.action,
-      // The board carries its own "where is it?" button, because in a
-      // headset there is no other button to press.
-      help: this.helpShown || !this.checklist.highlight ? '' : KID_UI.showMe,
+      // The board carries the only button in a headset, so what it offers
+      // depends on what there is to offer: finding the control while a step
+      // is being asked for, and starting the shutdown while none is.
+      button: this.helpShown || !this.checklist.highlight ? '' : KID_UI.showMe,
       progress: this.checklist.progress,
       stepLabel: KID_UI.stepOf(done + 1, this.totalItems),
       items: windowChecklist(this.checklist, (item) => {
@@ -351,9 +438,24 @@ export class KidHud {
     this.whyBtn.textContent = KID_UI.why;
     this.stuckEl.hidden = true;
     this.showBtn.classList.remove('nudge');
+    this.shutdownBtn.hidden = !this.checklist.holding;
+
+    // The aeroplane is running and nothing is being asked for. The card says
+    // so and offers the way out; it does not ask for an answer.
+    if (this.checklist.holding) {
+      this.chipEl.textContent = '';
+      this.stepNoEl.textContent = '';
+      this.iconEl.textContent = '🎉';
+      this.titleEl.textContent = KID_UI.runningTitle;
+      this.actionEl.textContent = KID_UI.runningBody;
+      this.showBtn.hidden = true;
+      this.whyBtn.hidden = true;
+      return;
+    }
 
     if (!pos) {
       this.chipEl.textContent = '🏁';
+      this.stepNoEl.textContent = '';
       this.iconEl.textContent = '😴';
       this.titleEl.textContent = KID_UI.allDone;
       this.actionEl.textContent = '';
@@ -367,12 +469,17 @@ export class KidHud {
     // of how much was left, on the one line that should say what is
     // happening now.
     this.chipEl.textContent = sectionName(pos.section.id);
+    this.stepNoEl.textContent = String(this.numbers.get(pos.item.id) ?? '');
     this.iconEl.textContent = step.icon;
     this.titleEl.textContent = step.title;
     this.actionEl.textContent = step.action;
     this.whyEl.textContent = step.why;
-    this.showBtn.hidden = !this.checklist.highlight;
-    this.whyBtn.hidden = false;
+    // In paper mode everything the sheet already says comes off the screen:
+    // the instruction, the reason, and the two buttons that open them. What
+    // is left is the number and the picture, which is what the child needs
+    // to know they are on the right row.
+    this.showBtn.hidden = this.paperMode || !this.checklist.highlight;
+    this.whyBtn.hidden = this.paperMode;
 
     // Retrigger the entry animation so a new step is impossible to miss.
     this.cardEl.classList.remove('fresh');
@@ -385,6 +492,15 @@ export class KidHud {
    * game is finding the switch, and an arrow that arms itself on every step
    * answers the question before it has been asked.
    */
+  /**
+   * The wrist board's one button. What it does is whatever it currently
+   * says: there is no second button to put the other thing on.
+   */
+  onBoardButton(): void {
+    if (this.checklist.holding) this.startShutdown();
+    else this.requestHelp();
+  }
+
   requestHelp(): void {
     const id = this.checklist.highlight;
     if (!id) return;
@@ -406,6 +522,18 @@ export class KidHud {
     if (id) this.callbacks.onShowControl(id);
   }
 
+  /**
+   * Begins the shutdown, which nothing else does. The list has been sitting
+   * at the end of the start waiting to be asked.
+   */
+  private startShutdown(): void {
+    if (!this.checklist.holding) return;
+    this.checklist.release();
+    this.itemAge = 0;
+    this.helpShown = false;
+    this.render();
+  }
+
   private toggleWhy(): void {
     this.whyEl.hidden = !this.whyEl.hidden;
     this.whyBtn.textContent = this.whyEl.hidden ? KID_UI.why : KID_UI.hideWhy;
@@ -423,33 +551,27 @@ export class KidHud {
     this.toast('oops', '💡', `Oj då! ${kid.title}`, kid.message);
   }
 
+  /**
+   * Confetti and a word, and nothing to dismiss.
+   *
+   * This was a modal over the cockpit asking whether they would like to shut
+   * the aeroplane down now — which turns the reward for getting an engine
+   * going into a fresh instruction to turn it off, and puts a dialogue
+   * between a six-year-old and the aeroplane they have just started. The
+   * shutdown is a button on the card instead, pressed when they feel like it.
+   */
   private celebrate(): void {
-    this.finishEl.hidden = false;
     this.finishEl.replaceChildren();
-
-    const confetti = el('div', 'kid-confetti');
     for (const piece of ['🎉', '✈️', '⭐', '🎊', '🛩️', '⭐', '🎉', '🎈']) {
-      confetti.append(el('span', undefined, piece));
+      this.finishEl.append(el('span', undefined, piece));
     }
-    this.finishEl.append(confetti);
-
-    const card = el('div', 'kid-finish-card');
-    card.append(el('div', 'kid-finish-kicker', KID_UI.goalKicker));
-    card.append(el('h2', undefined, KID_UI.goalTitle));
-    card.append(el('p', undefined, KID_UI.goalBody));
-
-    const actions = el('div', 'kid-finish-acts');
-    const on = el('button', 'kid-go', KID_UI.goalContinue);
-    on.type = 'button';
-    on.addEventListener('click', () => {
+    this.finishEl.hidden = false;
+    this.toast('done', '🎉', KID_UI.goalTitle, '');
+    // Long enough to see, short enough not to become scenery.
+    window.setTimeout(() => {
       this.finishEl.hidden = true;
-    });
-    const again = el('button', 'kid-again', KID_UI.goalAgain);
-    again.type = 'button';
-    again.addEventListener('click', () => this.callbacks.onReset());
-    actions.append(on, again);
-    card.append(actions);
-    this.finishEl.append(card);
+      this.finishEl.replaceChildren();
+    }, 6000);
   }
 
   private toast(kind: string, icon: string, title: string, body: string): void {
@@ -487,11 +609,4 @@ export class KidHud {
     btn.addEventListener('click', onClick);
     return btn;
   }
-}
-
-/** Section headings, in the same plain Swedish as the steps. */
-function sectionName(sectionId: string): string {
-  if (sectionId === 'before-start') return KID_UI.sectionBefore;
-  if (sectionId === 'shutdown') return KID_UI.sectionSecure;
-  return KID_UI.sectionStart;
 }

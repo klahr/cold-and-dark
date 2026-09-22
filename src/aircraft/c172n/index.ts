@@ -17,5 +17,6 @@ export const C172N: AircraftDefinition = {
   }),
   placards: panelPlacards('N738QK'),
   checklists: C172N_CHECKLISTS,
+  freePlayControls: ['throttle'],
   systems: C172N_SYSTEMS,
 };

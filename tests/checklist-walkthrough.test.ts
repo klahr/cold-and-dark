@@ -29,6 +29,9 @@ describe('the whole checklist, one item at a time', () => {
     const freebies: string[] = [];
 
     for (let guard = 0; guard < total + 5 && !checklist.finished; guard++) {
+      // Between the start and the shutdown the list waits to be asked; this
+      // pilot always says yes, so the walk covers every item as before.
+      if (checklist.holding) checklist.release();
       const item = checklist.position?.item;
       if (!item) break;
       visited.push(item.id);
@@ -60,6 +63,7 @@ describe('the whole checklist, one item at a time', () => {
     const checklist = new ChecklistRunner(C172N.checklists, sim);
 
     for (let guard = 0; guard < 40 && !checklist.finished; guard++) {
+      if (checklist.holding) checklist.release();
       const item = checklist.position?.item;
       if (!item) break;
       CHECKLIST_ACTIONS[item.id]?.(sim);

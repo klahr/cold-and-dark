@@ -420,14 +420,16 @@ export class App {
         // a tracked hand's wrist. Until there is one, it stays clipped
         // beside the panel.
         onLeftAnchorChanged: (anchor) => this.vrCard.attachToWrist(anchor, this.rig),
-        // The board's own button. It arms the arrow but deliberately does
-        // not move the pilot: turning somebody's head for them is unpleasant
-        // on a screen and worse in a headset.
-        onRequestHelp: () => this.hud.requestHelp(),
+        // The board's own button, whose meaning the overlay decides: it arms
+        // the arrow while a step is being asked for, and starts the shutdown
+        // while the aeroplane is just sitting there running. Arming the arrow
+        // deliberately does not move the pilot — turning somebody's head for
+        // them is unpleasant on a screen and worse in a headset.
+        onBoardButton: () => this.hud.onBoardButton(),
       },
     );
 
-    this.vrControls.setHelpTarget(this.vrCard.helpTarget);
+    this.vrControls.setButtonTarget(this.vrCard.buttonTarget);
 
     this.renderer.xr.addEventListener('sessionstart', () => this.onVrStart());
     this.renderer.xr.addEventListener('sessionend', () => this.onVrEnd());

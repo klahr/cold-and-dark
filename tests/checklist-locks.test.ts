@@ -66,6 +66,7 @@ describe('the guard rail', () => {
     const shut: string[] = [];
 
     for (let guard = 0; guard < ITEMS.length + 5 && !checklist.finished; guard++) {
+      if (checklist.holding) checklist.release();
       const item = checklist.position?.item;
       if (!item) break;
 
@@ -153,6 +154,7 @@ describe('the guard rail', () => {
     expect(free.length).toBeGreaterThan(0);
 
     for (let guard = 0; guard < ITEMS.length + 5 && !checklist.finished; guard++) {
+      if (checklist.holding) checklist.release();
       const item = checklist.position?.item;
       if (!item) break;
       for (const id of free) expect(checklist.isLocked(id), id).toBe(false);
@@ -164,6 +166,80 @@ describe('the guard rail', () => {
         waited += STEP;
       }
     }
+  });
+
+  /**
+   * Starting an engine and stopping one are two decisions. The list reaches
+   * the end of the start, holds, and does not ask for anything until it is
+   * told to — so a child can sit in a running aeroplane for as long as they
+   * like without the screen nagging them to turn it off again.
+   */
+  it('holds between the start and the shutdown until it is asked', () => {
+    const { sim, checklist } = fresh();
+    advanceTo(sim, checklist, 'ammeter-check');
+    expect(checklist.holding).toBe(false);
+
+    CHECKLIST_ACTIONS['ammeter-check']?.(sim);
+    for (let t = 0; t < 60 * 3; t++) {
+      sim.tick(STEP);
+      checklist.update(STEP);
+    }
+
+    expect(checklist.goalReached).toBe(true);
+    expect(checklist.holding).toBe(true);
+    // Nothing on screen, nothing to point at, and not "finished" either.
+    expect(checklist.position).toBeNull();
+    expect(checklist.highlight).toBeNull();
+    expect(checklist.finished).toBe(false);
+
+    // And it stays there: the shutdown does not begin on its own.
+    for (let t = 0; t < 60 * 30; t++) {
+      sim.tick(STEP);
+      checklist.update(STEP);
+    }
+    expect(checklist.holding).toBe(true);
+    expect(checklist.isDone('shutdown-throttle')).toBe(false);
+
+    checklist.release();
+    expect(checklist.holding).toBe(false);
+    expect(checklist.position?.item.id).toBe('shutdown-throttle');
+  });
+
+  /**
+   * The reward for starting the aeroplane should not be a dead cockpit. The
+   * throttle stays live so the engine can be played with; the controls that
+   * would stop it do not, because a stopped engine cannot satisfy the
+   * shutdown's first step and there would be no way forward.
+   */
+  it('leaves the free-play controls live while it holds', () => {
+    const { sim, checklist } = fresh();
+    advanceTo(sim, checklist, 'ammeter-check');
+    CHECKLIST_ACTIONS['ammeter-check']?.(sim);
+    for (let t = 0; t < 60 * 3; t++) {
+      sim.tick(STEP);
+      checklist.update(STEP);
+    }
+    expect(checklist.holding).toBe(true);
+
+    for (const id of C172N.freePlayControls ?? []) {
+      expect(checklist.isLocked(id), id).toBe(false);
+    }
+    for (const id of ['mixture', 'magKey', 'masterBattery', 'fuelSelector']) {
+      expect(checklist.isLocked(id), id).toBe(true);
+    }
+
+    // Revving it does not start the shutdown by itself.
+    sim.controls.set('throttle', 0.6);
+    for (let t = 0; t < 60 * 5; t++) {
+      sim.tick(STEP);
+      checklist.update(STEP);
+    }
+    expect(checklist.holding).toBe(true);
+
+    // And the list still works once it is asked for.
+    checklist.release();
+    expect(checklist.position?.item.id).toBe('shutdown-throttle');
+    expect(checklist.isLocked('throttle')).toBe(false);
   });
 
   /**

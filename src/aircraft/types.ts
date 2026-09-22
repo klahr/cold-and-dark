@@ -264,6 +264,21 @@ export interface AircraftDefinition {
    */
   placards?: readonly PanelPlacard[];
   checklists: readonly ChecklistSection[];
+  /**
+   * Controls the pilot may work while the aeroplane sits running between the
+   * start and the shutdown.
+   *
+   * The checklist holds everything but the live step's controls, and between
+   * phases there is no live step — so without this the cockpit would be shut
+   * down to the handful of things the list never mentions, which is a poor
+   * reward for having got the engine going. The throttle is here because
+   * revving it is the whole point of a running aeroplane to a six-year-old
+   * and it cannot strand anybody: the shutdown's first step asks for 1000 RPM
+   * whatever they have left it at. The mixture and the magnetos are not,
+   * because stopping the engine outside the procedure would leave the
+   * shutdown list asking for an RPM that no longer exists.
+   */
+  freePlayControls?: readonly string[];
   /** Engine, electrical and fuel parameters consumed by the simulation. */
   systems: SystemsParams;
 }

@@ -81,6 +81,8 @@ texture, the instrument faces and the engine sound are generated at runtime.
 | Crank the starter | Press **and hold** on the ignition key at START |
 | Hide the control wheel | `Y` |
 | Free orbit camera (dev) | `Shift`+`O`; `Esc` returns you to the seat |
+| Print the checklist | 🖨️ in the top bar |
+| Read from paper instead | 📄 in the top bar |
 
 **The control wheel is slightly see-through.** It sits squarely between the
 pilot and the bottom of the panel — where the throttle quadrant, the switch
@@ -115,6 +117,32 @@ The breaker is the one worth finding. With it out the aeroplane starts
 normally, runs normally and never charges, so a pilot who waved the scan
 through meets the consequence two minutes later at "AMMETER — CHECK
 CHARGING", with the low-voltage light on.
+
+**Starting an engine and stopping one are two decisions.** The list runs to
+the end of the start, and then holds: the aeroplane sits there running, no
+step is on screen, nothing ticks itself off and no arrow arms. Shutting down
+is a button on the card, pressed when the child feels like it.
+
+It used to run straight on into the shutdown behind a modal asking whether
+they would like to turn the aeroplane off now — which makes the reward for
+getting an engine going a fresh instruction to turn it off, and puts a
+dialogue between a six-year-old and the aeroplane they have just started.
+What is left of that moment is confetti that catches no clicks and clears
+itself.
+
+The cockpit is not dead while it holds. `freePlayControls` in the aircraft
+definition names what stays live — the throttle, for the 172N, because
+revving it is the whole point of a running aeroplane at six and it cannot
+strand anybody: the shutdown's first step asks for 1000 RPM whatever they
+have left it at. The mixture and the magnetos are deliberately not on that
+list, because stopping the engine outside the procedure would leave the
+shutdown asking for an RPM that no longer exists. Everything the checklist
+never mentions — the lights, the flaps, the trim — was free all along.
+
+In a headset the same button is the board's, because the board is the entire
+interface and there is nowhere else to put it. It is the one button there,
+so what it does is whatever it currently says: find the control while a step
+is being asked for, start the shutdown while none is.
 
 **One step's controls answer at a time.** While a step is current, the
 controls it names are live and every other control the checklist knows about
@@ -161,6 +189,74 @@ There is one overlay and it is the Swedish one. What it does:
   who cannot yet read "suction 4.8 inHg" only learns that part of the screen
   is not for them, and a clock turns a drill you are meant to think your way
   through into one you rush.
+
+## On paper
+
+**The list prints.** 🖨️ in the top bar builds a PDF of the whole checklist —
+every step, in the same Swedish, with the instruction and the reason — and
+downloads it. Nothing is sent anywhere; the bytes are made in the tab.
+
+**And then the screen can stop being a place to read.** 📄 turns on paper
+mode, which takes the instruction, the reason and both buttons off the card
+and leaves the step number, the picture and the title. A child reading a step
+off the screen is looking at the screen, and everything worth looking at is
+in the cockpit. Once the sheet is in their hand the card has one job left:
+saying which row of it they are on.
+
+That number is the only thing tying the paper to the screen, so both take it
+from `stepNumbers()` rather than counting separately — two counts that agree
+today would not have to agree after the next checklist item is added. It is
+not a progress count: there is still no "3 / 24" anywhere, for the reason
+given above. It is an index into a piece of paper.
+
+Paper mode is a screen setting and does not touch the wrist board, because
+the premise is a sheet in your hand and in a headset both of your hands are
+holding controllers.
+
+The PDF is written by hand, in `src/ui/pdf/PdfDocument.ts`, for the same
+reason there are no texture files: a PDF library would have been the first
+thing here that was downloaded. It does not have to be. The fourteen standard
+fonts are built into every reader, so a document that stays in Helvetica
+embeds nothing and subsets nothing — which is the part of writing a PDF that
+is actually hard — and what is left is an object table and a page of drawing
+operators. Text is WinAnsi, which is what makes å, ä, ö and the POH's em
+dashes come out as themselves. The file is assembled as a string and encoded
+at the very end, so a string index is a byte offset and the cross-reference
+table can be built by reading `length` as the objects go in.
+
+**The pictures are drawn, not embedded.** The card on screen leads with a
+picture because at six it is recognised from across the room, well before the
+sentence under it is read — and a printed page of nothing but Swedish
+sentences asks for exactly the reading the screen was careful to avoid. But an
+emoji in a PDF means carrying a font, a colour emoji font is megabytes, and it
+would have been the first asset this project ever downloaded. Rasterising them
+off a canvas would have meant a DOM at build time, a soft glyph at print
+resolution, and a picture that changes with whichever emoji font the machine
+happens to own.
+
+So `src/ui/kid/icons.ts` draws them, as circles, rounded rectangles and
+polygons on a one-unit square that scales to whatever tile it is given. They
+cost nothing, stay sharp at any size, and can be checked without a browser.
+Every shape is outlined as well as filled, which is what keeps them legible
+on the mono printer a child's page is likely to come off.
+
+They are **keyed by the emoji they stand in for**, so a step cannot end up
+with one picture on screen and another on paper, and a step that reuses an
+existing emoji gets its drawing for free. A test fails if any step's emoji has
+no drawing — including the invisible variation selector that makes `❄️` and
+`❄` different strings and the same snowflake.
+
+The step number is still what ties a row of paper to the card, because the
+card shows the emoji and the sheet shows the drawing. The POH's own callout is
+on there too, in small grey on the right — the sheet is the child's, but a
+grown-up holding it should be able to see what the real line says.
+
+The sheet is headed with the aeroplane's own name, taken from its definition
+rather than written into the copy, so printing a second aircraft would head
+its own list correctly. Under that heading, once, it says in Swedish that it
+is a toy and not a checklist — a page headed with an aeroplane's name and a
+column of tick boxes looks exactly like the real thing, and there is no footer
+for it to live in.
 
 The Swedish lives in one file, `src/ui/kid/swedish.ts`: a step per checklist
 item, a message per fault code, and a name per control. Nothing is generated
@@ -391,7 +487,10 @@ src/
   ui/             the overlay: checklist, coaching, tooltip
     overlay.ts         what the overlay needs from App, and vice versa
     VrChecklistCard.ts the wrist board, for when there is no DOM
+    pdf/               enough PDF to print a checklist, and no more
     kid/               the overlay itself, its stylesheet and all of its copy
+      checklistSheet.ts the printed list, and the numbering both halves share
+      icons.ts          the step pictures, drawn rather than embedded
 ```
 
 **Adding an aircraft.** Everything an aeroplane *is* lives under
@@ -463,6 +562,11 @@ in.
 - a copy test that every checklist item has Swedish child wording, that none
   of it has drifted back towards POH phrasing, and that no copy is left
   behind for a step that no longer exists;
+- a hold test that the list stops between the start and the shutdown, stays
+  stopped however long the aeroplane is left running, reports itself as
+  neither finished nor asking for anything, and moves on only when released —
+  and that the free-play controls stay live throughout while the ones that
+  would stop the engine do not;
 - a lock test that every step's own controls are live while that step is
   current — the failure that matters is not a switch that moves when it
   should not, but one that will not move when it should, which presents as
@@ -474,6 +578,15 @@ in.
   later, and that waiting is not a way to un-flood it. The rest of the suite
   cranks a fraction of a second after priming, so nothing else would notice
   the decay coming back;
+- a printed-sheet test that the PDF carries every step's words — in paper
+  mode there is nowhere else left to read them — that every step's emoji has
+  a drawing and that the drawing actually reaches the page rather than just
+  its tile, that it is headed with the aircraft it belongs to and carries the
+  disclaimer, that its cross-reference
+  table points at the objects it claims, since a table off by one byte is not
+  a layout glitch but a reader refusing to open the file, that the page count
+  it declares is the page count it drew, that the disclaimer is on every page,
+  and that wrapping stays inside its column and keeps every word;
 - a guide-arrow test that the arrow aims at the control, hovers on the
   pilot's side of it, parks in front when the control is out of view and
   flies back to it when the pilot turns;

@@ -175,7 +175,7 @@ export interface VrCardContent {
    * put a "show me" button in, so it goes here. Without it the rule that
    * help must be asked for would mean help could not be asked for at all.
    */
-  help: string;
+  button: string;
   /** 0..1, drawn as the bar. */
   progress: number;
   /** Free text beside the bar, e.g. "12 / 25" or "Steg 12 av 25". */
@@ -210,7 +210,7 @@ export class VrChecklistCard {
    * raycaster's way while the button is actually drawn — a board with no
    * button on it must not silently swallow a trigger pull.
    */
-  readonly helpTarget: THREE.Mesh;
+  readonly buttonTarget: THREE.Mesh;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -276,17 +276,17 @@ export class VrChecklistCard {
     // A hit plane over the button, sized and placed from the same pixel
     // rectangle that draws it, so the two cannot drift apart.
     const metresPerPx = WRIST_WIDTH / PX_W;
-    this.helpTarget = new THREE.Mesh(
+    this.buttonTarget = new THREE.Mesh(
       new THREE.PlaneGeometry(HELP_BUTTON.w * metresPerPx, HELP_BUTTON.h * metresPerPx),
       new THREE.MeshBasicMaterial({ visible: false }),
     );
-    this.helpTarget.position.set(
+    this.buttonTarget.position.set(
       (HELP_BUTTON.x + HELP_BUTTON.w / 2) * metresPerPx - WRIST_WIDTH / 2,
       height / 2 - (HELP_BUTTON.y + HELP_BUTTON.h / 2) * metresPerPx,
       0.001,
     );
-    this.helpTarget.visible = false;
-    this.object.add(this.helpTarget);
+    this.buttonTarget.visible = false;
+    this.object.add(this.buttonTarget);
 
     this.applyKneeboard();
     this.object.visible = false;
@@ -302,8 +302,8 @@ export class VrChecklistCard {
   }
 
   /** True while the help button is drawn and can be pressed. */
-  get helpOffered(): boolean {
-    return this.object.visible && this.helpTarget.visible;
+  get buttonOffered(): boolean {
+    return this.object.visible && this.buttonTarget.visible;
   }
 
   /**
@@ -382,7 +382,7 @@ export class VrChecklistCard {
     // in it: it appears and goes without the step moving, and leaving it out
     // meant asking for help repainted nothing. The icon strip needs no entry
     // of its own — it only ever changes when the step does.
-    const key = `${content.glyph}|${content.headline}|${content.detail}|${content.help}|${
+    const key = `${content.glyph}|${content.headline}|${content.detail}|${content.button}|${
       content.stepLabel
     }|${Math.round(content.progress * 200)}`;
     if (key !== this.lastKey) {
@@ -465,8 +465,8 @@ export class VrChecklistCard {
    * through to the cockpit behind it instead of being eaten.
    */
   private drawHelpButton(content: VrCardContent, t: Theme): void {
-    this.helpTarget.visible = content.help !== '';
-    if (!content.help) return;
+    this.buttonTarget.visible = content.button !== '';
+    if (!content.button) return;
 
     const c = this.ctx;
     const { x, y, w, h } = HELP_BUTTON;
@@ -479,7 +479,7 @@ export class VrChecklistCard {
     c.fillStyle = t.bar;
     c.textAlign = 'center';
     c.font = `700 ${TYPE.title}px ui-sans-serif, system-ui, sans-serif`;
-    c.fillText(content.help, x + w / 2, y + h / 2 + TYPE.title * 0.36);
+    c.fillText(content.button, x + w / 2, y + h / 2 + TYPE.title * 0.36);
     c.textAlign = 'left';
   }
 

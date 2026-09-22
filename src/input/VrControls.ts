@@ -57,7 +57,7 @@ export interface VrControlsCallbacks {
    * any other press rather than being special-cased inside the board,
    * because the board has no idea what a checklist is.
    */
-  onRequestHelp(): void;
+  onBoardButton(): void;
 }
 
 /**
@@ -82,7 +82,7 @@ export class VrControls {
    * from the cockpit's own hit targets so that a board with no button on it
    * cannot swallow a trigger pull meant for a switch behind it.
    */
-  private helpTarget: THREE.Object3D | null = null;
+  private buttonTarget: THREE.Object3D | null = null;
 
   /** Grip spaces by index, with whichever hand each has reported being in. */
   private readonly grips: THREE.Object3D[] = [];
@@ -278,7 +278,7 @@ export class VrControls {
         continue;
       }
       const picked = this.pickAny(hand);
-      hand.reticle.visible = picked.control !== null || picked.help;
+      hand.reticle.visible = picked.control !== null || picked.button;
       if (picked) hand.reticle.position.copy(this.hit);
       hand.ray.scale.z = picked ? this.origin.distanceTo(this.hit) : 1.2;
     }
@@ -298,13 +298,13 @@ export class VrControls {
    * Passing an object does not make it live: it is only picked while the
    * board itself says the button is being offered.
    */
-  setHelpTarget(target: THREE.Object3D | null): void {
-    this.helpTarget = target;
+  setButtonTarget(target: THREE.Object3D | null): void {
+    this.buttonTarget = target;
   }
 
   private pick(hand: HandState): ControlObject | null {
     const hit = this.pickAny(hand);
-    return hit.help ? null : hit.control;
+    return hit.button ? null : hit.control;
   }
 
   /**
@@ -313,7 +313,7 @@ export class VrControls {
    * pointing through the board at a switch behind it does what it looks
    * like it does.
    */
-  private pickAny(hand: HandState): { control: ControlObject | null; help: boolean } {
+  private pickAny(hand: HandState): { control: ControlObject | null; button: boolean } {
     this.tempMatrix.identity().extractRotation(hand.controller.matrixWorld);
     this.origin.setFromMatrixPosition(hand.controller.matrixWorld);
     this.direction.set(0, 0, -1).applyMatrix4(this.tempMatrix).normalize();
@@ -322,14 +322,14 @@ export class VrControls {
     this.raycaster.far = 2.5;
 
     const targets: THREE.Object3D[] = [...this.controlRig.pickTargets];
-    if (this.helpTarget?.visible) targets.push(this.helpTarget);
+    if (this.buttonTarget?.visible) targets.push(this.buttonTarget);
 
     const hits = this.raycaster.intersectObjects(targets, false);
     const first = hits[0];
-    if (!first) return { control: null, help: false };
+    if (!first) return { control: null, button: false };
     this.hit.copy(first.point);
-    if (first.object === this.helpTarget) return { control: null, help: true };
-    return { control: this.controlRig.objectForMesh(first.object) ?? null, help: false };
+    if (first.object === this.buttonTarget) return { control: null, button: true };
+    return { control: this.controlRig.objectForMesh(first.object) ?? null, button: false };
   }
 
   private onSelectStart(hand: HandState): void {
@@ -337,8 +337,8 @@ export class VrControls {
     if (this.suppressed[this.pointers.indexOf(hand)]) return;
 
     const hit = this.pickAny(hand);
-    if (hit.help) {
-      this.callbacks.onRequestHelp();
+    if (hit.button) {
+      this.callbacks.onBoardButton();
       return;
     }
     const control = hit.control;

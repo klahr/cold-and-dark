@@ -429,106 +429,64 @@
   font-weight: 700;
 }
 
-/* ----------------------------------------------------------- the finish */
+/* ------------------------------------------------- the running aeroplane */
 
-.kid-finish {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(6, 12, 22, 0.55);
-  backdrop-filter: blur(3px);
-}
-
-.kid-finish-card {
-  width: min(520px, calc(100vw - 48px));
-  padding: 34px 36px 30px;
-  text-align: center;
-  background: var(--kid-paper);
-  color: var(--kid-ink);
-  border-radius: 28px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  animation: kid-pop 0.45s cubic-bezier(0.22, 1.4, 0.4, 1);
-}
-
-.kid-finish-kicker {
-  font-size: 15px;
-  font-weight: 900;
-  letter-spacing: 0.14em;
-  color: var(--kid-grass);
-}
-
-.kid-finish-card h2 {
-  margin: 10px 0 0;
-  font-size: 34px;
-  font-weight: 900;
-  line-height: 1.1;
-}
-
-.kid-finish-card p {
-  margin: 12px 0 0;
-  font-size: 19px;
-  font-weight: 600;
-  line-height: 1.5;
-  color: #33435a;
-}
-
-.kid-finish-acts {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 24px;
-}
-
-.kid-go,
-.kid-again {
+/* The way out of a running aeroplane, and the only one. It is its own row
+   rather than one of the two step buttons, because those are hidden in paper
+   mode and this must not be. */
+.kid-shutdown {
+  display: block;
+  width: 100%;
   min-height: 54px;
-  padding: 0 24px;
+  margin-top: 18px;
+  padding: 0 22px;
   font-size: 18px;
-  border-radius: 16px;
-}
-
-.kid-go {
+  font-weight: 800;
   color: #fff;
   background: var(--kid-grass);
+  border-radius: 16px;
   box-shadow: 0 4px 0 #22855a;
+  transition: transform 0.12s ease, filter 0.12s ease;
 }
 
-.kid-again {
-  color: var(--kid-ink);
-  background: #eef1f5;
-  box-shadow: 0 4px 0 #cfd6de;
+.kid-shutdown:hover {
+  filter: brightness(1.05);
 }
 
-.kid-go:active,
-.kid-again:active {
+.kid-shutdown:active {
   transform: translateY(3px);
   box-shadow: none;
 }
 
-.kid-confetti {
+.kid-shutdown[hidden] {
+  display: none;
+}
+
+/* Confetti, and nothing else. This used to be a modal over the cockpit
+   asking whether they would like to turn the aeroplane off now; it covers
+   nothing and catches no clicks, so the cockpit stays where it was. */
+.kid-finish {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
 }
 
-.kid-confetti span {
+.kid-finish span {
   position: absolute;
   top: -10%;
   font-size: 34px;
   animation: kid-fall 3.4s linear infinite;
 }
 
-.kid-confetti span:nth-child(1) { left: 6%; animation-delay: 0s; }
-.kid-confetti span:nth-child(2) { left: 19%; animation-delay: 0.5s; }
-.kid-confetti span:nth-child(3) { left: 31%; animation-delay: 1.1s; }
-.kid-confetti span:nth-child(4) { left: 44%; animation-delay: 0.2s; }
-.kid-confetti span:nth-child(5) { left: 58%; animation-delay: 0.8s; }
-.kid-confetti span:nth-child(6) { left: 71%; animation-delay: 1.5s; }
-.kid-confetti span:nth-child(7) { left: 84%; animation-delay: 0.35s; }
-.kid-confetti span:nth-child(8) { left: 93%; animation-delay: 1.2s; }
+.kid-finish span:nth-child(1) { left: 6%; animation-delay: 0s; }
+.kid-finish span:nth-child(2) { left: 19%; animation-delay: 0.5s; }
+.kid-finish span:nth-child(3) { left: 31%; animation-delay: 1.1s; }
+.kid-finish span:nth-child(4) { left: 44%; animation-delay: 0.2s; }
+.kid-finish span:nth-child(5) { left: 58%; animation-delay: 0.8s; }
+.kid-finish span:nth-child(6) { left: 71%; animation-delay: 1.5s; }
+.kid-finish span:nth-child(7) { left: 84%; animation-delay: 0.35s; }
+.kid-finish span:nth-child(8) { left: 93%; animation-delay: 1.2s; }
 
 @keyframes kid-fall {
   from {
@@ -540,6 +498,60 @@
 }
 
 /* --------------------------------------------------------- small screens */
+
+/* ------------------------------------------------------------------ */
+/* Paper mode                                                          */
+/* ------------------------------------------------------------------ */
+
+/* The step number, which exists only once the list is on paper. It is not
+   a count of what is left — that is why there is no "3 / 24" anywhere on
+   this screen — it is the number printed beside the same step on the sheet,
+   so a child can find their row without reading a word. */
+.kid-stepno {
+  display: none;
+  flex: none;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  font-size: 38px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--kid-ink);
+  background: #fff;
+  border: 4px solid var(--kid-ink);
+  border-radius: 999px;
+}
+
+.kid.paper .kid-stepno {
+  display: grid;
+}
+
+/* Everything the sheet already says comes off the screen. The card keeps
+   its shape rather than collapsing to nothing, because it is still the
+   thing that changes when a step is done — and on a card that has stopped
+   being read, that movement is the whole signal. */
+.kid.paper .kid-chip,
+.kid.paper .kid-action,
+.kid.paper .kid-why,
+.kid.paper .kid-acts,
+.kid.paper .kid-stuck {
+  display: none;
+}
+
+.kid.paper .kid-card {
+  padding: 18px 22px;
+}
+
+.kid.paper .kid-icon {
+  width: 72px;
+  height: 72px;
+  font-size: 40px;
+  border-radius: 18px;
+}
+
+.kid.paper .kid-what {
+  font-size: 30px;
+}
 
 @media (max-width: 860px), (max-height: 620px) {
   .kid-card {
@@ -575,12 +587,30 @@
   }
 }
 
+@media (max-width: 860px), (max-height: 620px) {
+  .kid-stepno {
+    width: 54px;
+    height: 54px;
+    font-size: 28px;
+    border-width: 3px;
+  }
+
+  .kid.paper .kid-icon {
+    width: 54px;
+    height: 54px;
+    font-size: 30px;
+  }
+
+  .kid.paper .kid-what {
+    font-size: 24px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kid-card.fresh,
   .kid-toast,
   .kid-show.nudge,
-  .kid-confetti span,
-  .kid-finish-card {
+  .kid-finish span {
     animation: none;
   }
 }

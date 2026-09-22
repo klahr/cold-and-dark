@@ -155,6 +155,9 @@ export const OBSERVATIONS = new Set(['oil-pressure', 'ammeter-check', 'shutdown-
  */
 export function advanceTo(sim: Simulation, checklist: ChecklistRunner, itemId: string): void {
   for (let guard = 0; guard < 40; guard++) {
+    // The list stops once the engine is running and waits to be asked for
+    // the shutdown. A test walking past that point is a pilot who asked.
+    if (checklist.holding) checklist.release();
     const item = checklist.position?.item;
     if (!item) throw new Error(`the checklist finished before reaching "${itemId}"`);
     if (item.id === itemId) return;

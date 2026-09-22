@@ -79,6 +79,11 @@ export class Ignition {
       if (this.grindSeconds > 1.2) sim.faults.raise('starter-while-running', sim.time);
     } else {
       this.grindSeconds = 0;
+      // Cleared like every other condition in here. Left standing it was a
+      // fault that could only ever be reported once a session, and — since a
+      // live fault hands back the controls that put it right — it also left
+      // the ignition key unlocked for the rest of the flight.
+      sim.faults.clear('starter-while-running');
     }
 
     if (!this.sparkStrength && sim.electrical.busPowered) {

@@ -53,6 +53,15 @@ export interface SetupOptions {
   carbHeat?: number;
   strokes?: number;
   master?: boolean;
+  /** Push every breaker in, as "CIRCUIT BREAKERS — CHECK IN" asks. */
+  breakers?: boolean;
+}
+
+/** Every breaker on the panel, set or popped. */
+export function setBreakers(sim: Simulation, inPlace: boolean): void {
+  for (const def of sim.controls.definitions()) {
+    if (def.kind === 'breaker') sim.controls.set(def.id, inPlace ? 1 : 0);
+  }
 }
 
 /**
@@ -60,6 +69,9 @@ export interface SetupOptions {
  * override one item at a time to isolate a single mistake.
  */
 export function prepareForStart(sim: Simulation, opts: SetupOptions = {}): void {
+  // The aeroplane is found with the alternator field breaker popped, so the
+  // breaker scan is part of a by-the-book start.
+  if (opts.breakers ?? true) setBreakers(sim, true);
   select(sim, 'fuelSelector', opts.fuel ?? 'BOTH');
   sim.controls.set('parkingBrake', 0);
   sim.controls.set('mixture', opts.mixture ?? 1);

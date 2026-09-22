@@ -1,15 +1,13 @@
 import type { ControlDef } from '../../aircraft/types';
 import type { FaultCode } from '../../sim/Faults';
 import type { Simulation } from '../../sim/Simulation';
-import type { ControlDescription } from '../describeControl';
+import type { ControlDescription } from '../overlay';
 
 /**
  * Swedish for a six-year-old who can read.
  *
- * The expert HUD speaks POH English, because that is the vocabulary a real
- * checklist is written in and translating it would teach the wrong words.
- * This file is the other half: the same procedure, every step of it, in
- * language a child can act on. Nothing is dropped — a shorter list would
+ * Every word on screen is here. The checklist underneath is the POH's own,
+ * in POH English, and nothing is dropped from it — a shorter list would
  * teach a shorter procedure — but every callout becomes a thing to *do*,
  * and every "why" becomes one short sentence with a reason a child cares
  * about.
@@ -31,10 +29,9 @@ export interface KidStep {
 }
 
 /**
- * Keyed by checklist item id. The two aeroplanes share ids wherever they
- * share a step, and every id that differs means a genuinely different
- * action, so one flat table covers both. `tests/kid-copy.test.ts` asserts
- * there is an entry for every item of every registered aircraft.
+ * Keyed by checklist item id. `tests/kid-copy.test.ts` asserts there is an
+ * entry for every item of every registered aircraft, and nothing left over
+ * for a step that no longer exists.
  */
 export const KID_STEPS: Record<string, KidStep> = {
   /* ------------------- Before starting engine ------------------- */
@@ -76,7 +73,7 @@ export const KID_STEPS: Record<string, KidStep> = {
   },
   'breakers-in': {
     icon: '🔘',
-    title: 'Tryck in alla små knappar',
+    title: 'Hitta knappen som sticker ut',
     action: 'Titta på raden med små runda knappar. Sticker någon ut? Klicka på den!',
     why: 'Varje liten knapp är en säkring. Sticker en ut är den saken den styr helt död.',
   },
@@ -153,38 +150,6 @@ export const KID_STEPS: Record<string, KidStep> = {
     title: 'Kolla att det laddar',
     action: 'Titta på mätaren AMMETER. Nålen ska peka lite åt plus-sidan.',
     why: 'Motorn fyller på batteriet igen, precis som en laddare till en surfplatta.',
-  },
-
-  /* ------------ Starting the engine: injected aircraft ------------ */
-  'mixture-rich-prime': {
-    icon: '🔴',
-    title: 'Tryck in den röda knappen',
-    action: 'Dra uppåt på den röda knappen tills den är helt inne.',
-    why: 'Nu ska bensinpumpen få fylla på bensin, och det går bara när den röda knappen är inne.',
-  },
-  'prime-pump': {
-    icon: '⛽',
-    title: 'Kör bensinpumpen',
-    action: 'Fäll upp brytaren FUEL PUMP. Räkna lugnt till fyra. Fäll ner den igen.',
-    why: 'Pumpen fyller på bensin fram till motorn. Fyra sekunder räcker — längre och motorn blir dränkt.',
-  },
-  'mixture-cutoff-start': {
-    icon: '⛔',
-    title: 'Dra ut den röda knappen',
-    action: 'Dra neråt på den röda knappen tills den är helt ute.',
-    why: 'Det här planet vill ha stängd bensinkran just i startögonblicket. Du släpper på bensinen om en liten stund.',
-  },
-  crank: {
-    icon: '🔑',
-    title: 'Vrid om nyckeln',
-    action: 'Klicka på nyckelns högra sida tills det står BOTH. Tryck sedan och HÅLL KVAR.',
-    why: 'Nyckeln drar runt motorn. Snart hostar den till — då är det din tur igen.',
-  },
-  'mixture-advance': {
-    icon: '🔴',
-    title: 'Tryck in den röda knappen igen',
-    action: 'Så fort motorn hostar till: dra uppåt på den röda knappen tills den är helt inne.',
-    why: 'Nu behöver motorn bensin för att fortsätta gå. Väntar du för länge somnar den om.',
   },
 
   /* ---------------------- Securing the aeroplane ---------------------- */
@@ -390,9 +355,8 @@ export const KID_UI = {
   showMe: '👉 Var är den?',
   why: '🤔 Varför då?',
   hideWhy: 'Stäng',
-  reset: '↺ Börja om',
+  reset: 'Börja om',
   sound: 'Ljud',
-  adults: 'För vuxna',
   vr: 'VR-glasögon',
   inVr: 'Du är i VR',
   vrHint: 'Vrid vänster handled mot dig för att se listan.',

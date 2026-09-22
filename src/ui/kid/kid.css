@@ -45,8 +45,17 @@
   display: none;
 }
 
+/**
+ * Only the family is inherited, never the size.
+ *
+ * `font: inherit` here looked harmless and silently set every button on the
+ * overlay to the page's 13px: the shorthand covers `font-size`, and
+ * `.kid button` outranks a single class like `.kid-tool`, so each button's
+ * own size below was being thrown away. Sizes are set per button, and this
+ * rule must not have an opinion about them.
+ */
 .kid button {
-  font: inherit;
+  font-family: inherit;
   font-weight: 800;
   cursor: pointer;
   border: none;
@@ -109,10 +118,15 @@
   gap: 8px;
 }
 
+/* A glyph each, so these are discs rather than pills. With no word under it
+   the glyph is the whole button, so it is drawn at the size a word would
+   have taken rather than at text size in a lot of empty paper. */
 .kid-tool {
-  min-height: 44px;
-  padding: 0 18px;
-  font-size: 16px;
+  min-width: 52px;
+  min-height: 52px;
+  padding: 0 12px;
+  font-size: 28px;
+  line-height: 1;
   color: var(--kid-ink);
   background: var(--kid-paper);
   border-radius: 999px;
@@ -126,22 +140,6 @@
 
 .kid-tool:active {
   transform: translateY(1px);
-}
-
-/* The way back to the real trainer is for the grown-up, so it is the one
-   thing on screen that does not invite a six-year-old to press it. */
-.kid-quiet {
-  background: rgba(255, 253, 247, 0.16);
-  color: rgba(255, 253, 247, 0.72);
-  font-size: 14px;
-  font-weight: 700;
-  box-shadow: none;
-  backdrop-filter: blur(8px);
-}
-
-.kid-quiet:hover {
-  background: rgba(255, 253, 247, 0.28);
-  color: var(--kid-paper);
 }
 
 /* ------------------------------------------------------------ progress */
@@ -178,17 +176,6 @@
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
 }
 
-.kid-count {
-  position: absolute;
-  left: calc(100% + 12px);
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 16px;
-  font-weight: 900;
-  color: var(--kid-paper);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
-  white-space: nowrap;
-}
 
 /* ---------------------------------------------------------------- card */
 

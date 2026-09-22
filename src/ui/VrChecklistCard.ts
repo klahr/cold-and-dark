@@ -15,47 +15,34 @@ const WRIST_WIDTH = 0.18;
 const KNEEBOARD_WIDTH = 0.36;
 
 /**
+ * The help button, in canvas pixels: a strip across the board just above the
+ * list.
+ *
+ * It is the only thing on the board you can press, so it is large — the
+ * whole width, deep enough to hit with a controller ray at arm's length,
+ * and nowhere near the edge where the frame is. It sits in the gap between
+ * the caption and the icon strip, which is the one band of the board that
+ * never has words in it.
+ */
+export const HELP_BUTTON = {
+  x: 38,
+  y: 516,
+  w: PX_W - 76,
+  h: 72,
+} as const;
+
+/**
  * Type sizes, in texture pixels.
  *
- * Deliberately large for the board's physical size: this is read at a
- * glance, at a wrist's distance, through lenses, by someone who may be six.
- * Fitting more on the board is not worth a single squint — if something has
- * to give, it is the number of list rows, not the size of the words.
+ * Almost all of the board goes on the picture: at six you recognise a glyph
+ * across the cabin and read a sentence only once you have decided to. The
+ * rest is deliberately large for the board's physical size, because it is
+ * read at a glance, at a wrist's distance, through lenses. Fitting more on
+ * the board is not worth a single squint — if something has to give, it is
+ * the number of list rows, not the size of the words.
  */
 const TYPE = {
-  title: 34,
   step: 32,
-  section: 30,
-  headline: 54,
-  detail: 38,
-  hint: 34,
-  item: 34,
-} as const;
-
-const LINE = {
-  headline: 62,
-  detail: 48,
-  hint: 42,
-  item: 50,
-} as const;
-
-/**
- * The list gets the bottom of the board, always.
- *
- * It used to start wherever the current step happened to end, which meant a
- * long callout with a long reason pushed it off the bottom and the list
- * simply vanished — the board still looked fine, just without the thing it
- * is for. The step text is capped to fit above this line instead; running
- * out of room costs a truncated sentence, not the whole list.
- */
-const LIST_TOP = 620;
-
-/**
- * The kid board's own scale. Almost all of it goes on the picture: at six
- * you recognise a glyph across the cabin and read a sentence only once you
- * have decided to.
- */
-const KID = {
   glyph: 200,
   title: 52,
   titleLine: 60,
@@ -65,13 +52,6 @@ const KID = {
   stripIcon: 46,
   stripCurrent: 62,
   strip: 7,
-} as const;
-
-/** Line budgets for the step text, chosen to land just above LIST_TOP. */
-const MAX_LINES = {
-  headline: 2,
-  detail: 3,
-  hint: 2,
 } as const;
 
 /**
@@ -164,7 +144,7 @@ const BOARD_UP = new THREE.Vector3(0, 1, 0);
 
 export interface VrCardItem {
   text: string;
-  /** Picture cue, drawn instead of the text on the kid board. */
+  /** Picture cue, drawn instead of the text on the board. */
   icon?: string;
   done: boolean;
   current: boolean;
@@ -173,23 +153,29 @@ export interface VrCardItem {
 /**
  * Everything the board draws, supplied by whichever overlay is driving.
  *
- * The card is deliberately a dumb renderer: the expert HUD hands it POH
- * English and the kid HUD hands it Swedish, and neither the card nor the
- * simulation has to know which language is in play.
+ * The card is deliberately a dumb renderer: the overlay hands it the words
+ * and it draws them, so neither the card nor the simulation has to know what
+ * is on the checklist.
  */
 export interface VrCardContent {
-  theme: 'expert' | 'kid';
   /**
    * The current step as a single picture. The kid board is built around
    * this: at six you recognise the picture long before you finish the
    * sentence, so the picture is the thing and the words are the caption.
    */
   glyph: string;
-  title: string;
-  section: string;
+  /** The step, as a short line: what to do. */
   headline: string;
+  /** A sentence under it, or empty. */
   detail: string;
-  hint: string;
+  /**
+   * Label for the board's own help button, or empty to leave it off.
+   *
+   * In a headset the board is the entire interface: there is no overlay to
+   * put a "show me" button in, so it goes here. Without it the rule that
+   * help must be asked for would mean help could not be asked for at all.
+   */
+  help: string;
   /** 0..1, drawn as the bar. */
   progress: number;
   /** Free text beside the bar, e.g. "12 / 25" or "Steg 12 av 25". */
@@ -198,65 +184,33 @@ export interface VrCardContent {
   finished: boolean;
 }
 
-interface Theme {
-  bg: string;
-  frame: number;
-  muted: string;
-  headline: string;
-  body: string;
-  hint: string;
-  bar: string;
-  barBed: string;
-  itemDone: string;
-  itemNext: string;
-}
-
-const THEMES: Record<VrCardContent['theme'], Theme> = {
-  expert: {
-    bg: '#0f1216',
-    frame: 0x15171b,
-    muted: '#7c848f',
-    headline: '#56b2f0',
-    body: '#c6cbd2',
-    hint: '#e0a83c',
-    bar: '#57c07a',
-    barBed: '#23272d',
-    itemDone: '#5c6470',
-    itemNext: '#aeb6c0',
-  },
-  // Same board, child's palette: paper rather than instrument panel, so it
-  // reads as the thing telling you what to do rather than part of the
-  // aeroplane telling you what it is doing.
-  kid: {
-    bg: '#fffdf7',
-    frame: 0xffc531,
-    muted: '#5b6b81',
-    headline: '#16243a',
-    body: '#33435a',
-    hint: '#2a4a2f',
-    bar: '#35b57a',
-    barBed: '#e4e8ee',
-    itemDone: '#9aa6b6',
-    itemNext: '#41506a',
-  },
-};
-
 /**
- * The checklist, strapped to the left wrist.
- *
- * In a headset the DOM overlay does not exist, so the coaching has to live
- * in the world. It used to be a fixed kneeboard clipped beside the panel,
- * which meant looking away from whatever you were about to touch. On the
- * wrist it goes where a pilot's eyes already go, and it stays out of the way
- * until asked for: roll the left wrist toward you and the board turns to
- * face you and fades up, exactly like checking a watch.
- *
- * The reveal is driven by whether the board's own face is pointed at the
- * head, not by any assumption about which way a controller is held — so it
- * behaves sensibly even if the mounting numbers above want tuning.
+ * The board's palette: paper rather than instrument panel, so it reads as
+ * the thing telling you what to do rather than as part of the aeroplane
+ * telling you what it is doing.
  */
+const THEME = {
+  bg: '#fffdf7',
+  frame: 0xffc531,
+  muted: '#5b6b81',
+  headline: '#16243a',
+  body: '#33435a',
+  bar: '#35b57a',
+  barBed: '#e4e8ee',
+} as const;
+
+type Theme = typeof THEME;
+
 export class VrChecklistCard {
   readonly object: THREE.Group;
+  /**
+   * What a controller ray has to hit to ask for help.
+   *
+   * Invisible, like every other hit proxy in the cockpit, and only in the
+   * raycaster's way while the button is actually drawn — a board with no
+   * button on it must not silently swallow a trigger pull.
+   */
+  readonly helpTarget: THREE.Mesh;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -304,7 +258,7 @@ export class VrChecklistCard {
       transparent: true,
     });
     this.frameMat = new THREE.MeshBasicMaterial({
-      color: THEMES.expert.frame,
+      color: THEME.frame,
       toneMapped: false,
       transparent: true,
     });
@@ -319,6 +273,21 @@ export class VrChecklistCard {
     frame.position.z = -0.002;
     this.object.add(frame);
 
+    // A hit plane over the button, sized and placed from the same pixel
+    // rectangle that draws it, so the two cannot drift apart.
+    const metresPerPx = WRIST_WIDTH / PX_W;
+    this.helpTarget = new THREE.Mesh(
+      new THREE.PlaneGeometry(HELP_BUTTON.w * metresPerPx, HELP_BUTTON.h * metresPerPx),
+      new THREE.MeshBasicMaterial({ visible: false }),
+    );
+    this.helpTarget.position.set(
+      (HELP_BUTTON.x + HELP_BUTTON.w / 2) * metresPerPx - WRIST_WIDTH / 2,
+      height / 2 - (HELP_BUTTON.y + HELP_BUTTON.h / 2) * metresPerPx,
+      0.001,
+    );
+    this.helpTarget.visible = false;
+    this.object.add(this.helpTarget);
+
     this.applyKneeboard();
     this.object.visible = false;
   }
@@ -330,6 +299,11 @@ export class VrChecklistCard {
    */
   get beingRead(): boolean {
     return this.mode === 'wrist' && this.revealed;
+  }
+
+  /** True while the help button is drawn and can be pressed. */
+  get helpOffered(): boolean {
+    return this.object.visible && this.helpTarget.visible;
   }
 
   /**
@@ -403,14 +377,19 @@ export class VrChecklistCard {
     // moved onto the wrist was to be where your eyes already go.
     this.object.visible = true;
 
-    const key = `${content.theme}|${content.title}|${content.headline}|${Math.round(
-      content.progress * 200,
-    )}`;
+    // What is on the board, as a string, so it is redrawn when it changes
+    // and not sixty times a second when it has not. The help button belongs
+    // in it: it appears and goes without the step moving, and leaving it out
+    // meant asking for help repainted nothing. The icon strip needs no entry
+    // of its own — it only ever changes when the step does.
+    const key = `${content.glyph}|${content.headline}|${content.detail}|${content.help}|${
+      content.stepLabel
+    }|${Math.round(content.progress * 200)}`;
     if (key !== this.lastKey) {
       this.lastKey = key;
       this.draw(content);
       this.texture.needsUpdate = true;
-      this.frameMat.color.setHex(THEMES[content.theme].frame);
+      this.frameMat.color.setHex(THEME.frame);
     }
 
     // The kneeboard is bolted to the cabin and always readable; only the
@@ -470,12 +449,38 @@ export class VrChecklistCard {
 
   private draw(content: VrCardContent): void {
     const c = this.ctx;
-    const t = THEMES[content.theme];
-    c.fillStyle = t.bg;
+    c.fillStyle = THEME.bg;
     c.fillRect(0, 0, PX_W, PX_H);
     c.textAlign = 'left';
-    if (content.theme === 'kid') this.drawKid(content, t);
-    else this.drawExpert(content, t);
+    this.drawBoard(content, THEME);
+    this.drawHelpButton(content, THEME);
+  }
+
+  /**
+   * The board's one control: ask where the switch is.
+   *
+   * Drawn last so it sits over whatever the step text did with the space,
+   * and hidden — along with its hit plane — the moment there is nothing to
+   * ask for, which is how a pull of the trigger at an empty board goes
+   * through to the cockpit behind it instead of being eaten.
+   */
+  private drawHelpButton(content: VrCardContent, t: Theme): void {
+    this.helpTarget.visible = content.help !== '';
+    if (!content.help) return;
+
+    const c = this.ctx;
+    const { x, y, w, h } = HELP_BUTTON;
+    c.fillStyle = t.barBed;
+    c.fillRect(x, y, w, h);
+    c.strokeStyle = t.bar;
+    c.lineWidth = 3;
+    c.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+
+    c.fillStyle = t.bar;
+    c.textAlign = 'center';
+    c.font = `700 ${TYPE.title}px ui-sans-serif, system-ui, sans-serif`;
+    c.fillText(content.help, x + w / 2, y + h / 2 + TYPE.title * 0.36);
+    c.textAlign = 'left';
   }
 
   /**
@@ -483,7 +488,7 @@ export class VrChecklistCard {
    * of what to do, and the rest of the list as pictures rather than a column
    * of Swedish a six-year-old has to read through to find their place.
    */
-  private drawKid(content: VrCardContent, t: Theme): void {
+  private drawBoard(content: VrCardContent, t: Theme): void {
     const c = this.ctx;
     const mid = PX_W / 2;
     const pad = 38;
@@ -500,28 +505,28 @@ export class VrChecklistCard {
     c.fillText(content.stepLabel, mid, 104);
 
     // The picture, as big as the board will allow.
-    c.font = `${KID.glyph}px ui-sans-serif, system-ui, sans-serif`;
+    c.font = `${TYPE.glyph}px ui-sans-serif, system-ui, sans-serif`;
     c.fillText(content.glyph || '\u2708\ufe0f', mid, 330);
 
     c.fillStyle = content.finished ? t.bar : t.headline;
-    c.font = `800 ${KID.title}px ui-sans-serif, system-ui, sans-serif`;
-    let y = wrap(c, content.headline, mid, 428, inner, KID.titleLine, 2);
+    c.font = `800 ${TYPE.title}px ui-sans-serif, system-ui, sans-serif`;
+    let y = wrap(c, content.headline, mid, 428, inner, TYPE.titleLine, 2);
 
     if (content.detail) {
       c.fillStyle = t.body;
-      c.font = `600 ${KID.detail}px ui-sans-serif, system-ui, sans-serif`;
-      wrap(c, content.detail, mid, y + 24, inner, KID.detailLine, 2);
+      c.font = `600 ${TYPE.detail}px ui-sans-serif, system-ui, sans-serif`;
+      wrap(c, content.detail, mid, y + 24, inner, TYPE.detailLine, 2);
     }
 
     // The list, as pictures. Ticked ones are faded and carry a check.
-    const icons = content.items.slice(0, KID.strip);
+    const icons = content.items.slice(0, TYPE.strip);
     if (icons.length === 0) return;
     const step = inner / icons.length;
     const row = PX_H - 74;
     icons.forEach((item, i) => {
       const x = pad + step * (i + 0.5);
       c.globalAlpha = item.done ? 0.3 : item.current ? 1 : 0.65;
-      c.font = `${item.current ? KID.stripCurrent : KID.stripIcon}px ui-sans-serif, system-ui, sans-serif`;
+      c.font = `${item.current ? TYPE.stripCurrent : TYPE.stripIcon}px ui-sans-serif, system-ui, sans-serif`;
       c.fillStyle = t.headline;
       c.fillText(item.icon ?? '\u00b7', x, row);
       c.globalAlpha = 1;
@@ -533,72 +538,8 @@ export class VrChecklistCard {
     });
   }
 
-  /** POH English, where the words are the content. */
-  private drawExpert(content: VrCardContent, t: Theme): void {
-    const c = this.ctx;
-    const pad = 38;
-    const inner = PX_W - pad * 2;
-
-    c.fillStyle = t.muted;
-    c.font = `700 ${TYPE.title}px ui-sans-serif, system-ui, sans-serif`;
-    c.fillText(content.title.toUpperCase(), pad, 52);
-
-    c.fillStyle = t.barBed;
-    c.fillRect(pad, 74, inner, 14);
-    c.fillStyle = t.bar;
-    c.fillRect(pad, 74, inner * clamp01(content.progress), 14);
-
-    c.fillStyle = t.muted;
-    c.font = `700 ${TYPE.step}px ui-sans-serif, system-ui, sans-serif`;
-    c.fillText(content.stepLabel, pad, 132);
-
-    let y = 156;
-    if (content.section) {
-      c.fillStyle = t.muted;
-      c.font = `600 ${TYPE.section}px ui-sans-serif, system-ui, sans-serif`;
-      c.fillText(content.section.toUpperCase(), pad, y);
-      y += 36;
-    }
-
-    c.fillStyle = content.finished ? t.bar : t.headline;
-    c.font = `800 ${TYPE.headline}px ui-sans-serif, system-ui, sans-serif`;
-    y = wrap(c, content.headline, pad, y + 14, inner, LINE.headline, MAX_LINES.headline);
-
-    if (content.detail) {
-      c.fillStyle = t.body;
-      c.font = `500 ${TYPE.detail}px ui-sans-serif, system-ui, sans-serif`;
-      y = wrap(c, content.detail, pad, y + 20, inner, LINE.detail, MAX_LINES.detail);
-    }
-
-    if (content.hint) {
-      c.fillStyle = t.hint;
-      c.font = `500 ${TYPE.hint}px ui-sans-serif, system-ui, sans-serif`;
-      wrap(c, content.hint, pad, y + 18, inner, LINE.hint, MAX_LINES.hint);
-    }
-
-    c.fillStyle = t.barBed;
-    c.fillRect(pad, LIST_TOP - 22, inner, 2);
-
-    let row = LIST_TOP + TYPE.item;
-    c.font = `600 ${TYPE.item}px ui-sans-serif, system-ui, sans-serif`;
-    for (const item of content.items) {
-      if (row > PX_H - 14) break;
-      c.fillStyle = item.done ? t.itemDone : item.current ? t.headline : t.itemNext;
-      c.fillText(item.done ? '\u2713' : item.current ? '\u25b6' : '\u00b7', pad, row);
-      c.fillText(ellipsise(c, item.text, inner - 56), pad + 48, row);
-      row += LINE.item;
-    }
-  }
 }
 
-/**
- * The slice of the checklist worth showing on a board this size: a couple of
- * ticked items for a sense of place, the current one, and what is coming.
- *
- * `label` is supplied by the caller so the same window can be drawn in POH
- * English, or in Swedish as a row of pictures, without this function knowing
- * either exists.
- */
 export function windowChecklist(
   checklist: ChecklistRunner,
   label: (item: ChecklistItem) => { text: string; icon?: string },

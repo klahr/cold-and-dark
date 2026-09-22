@@ -45,6 +45,15 @@ export interface VrControlsCallbacks {
    * subscription rather than something to read once.
    */
   onLeftAnchorChanged(anchor: THREE.Object3D | null): void;
+  /**
+   * The pilot pressed the wrist board's help button.
+   *
+   * In a headset the board is the whole interface, so the one button on it
+   * is how "show me where that switch is" gets asked for. It is routed like
+   * any other press rather than being special-cased inside the board,
+   * because the board has no idea what a checklist is.
+   */
+  onRequestHelp(): void;
 }
 
 /**
@@ -63,6 +72,13 @@ export class VrControls {
   private readonly origin = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
   private readonly hit = new THREE.Vector3();
+
+  /**
+   * The wrist board's help button, while it is being offered. Kept apart
+   * from the cockpit's own hit targets so that a board with no button on it
+   * cannot swallow a trigger pull meant for a switch behind it.
+   */
+  private helpTarget: THREE.Object3D | null = null;
 
   /** Grip spaces by index, with whichever hand each has reported being in. */
   private readonly grips: THREE.Object3D[] = [];
@@ -257,8 +273,8 @@ export class VrControls {
         hand.reticle.visible = false;
         continue;
       }
-      const picked = this.pick(hand);
-      hand.reticle.visible = picked !== null;
+      const picked = this.pickAny(hand);
+      hand.reticle.visible = picked.control !== null || picked.help;
       if (picked) hand.reticle.position.copy(this.hit);
       hand.ray.scale.z = picked ? this.origin.distanceTo(this.hit) : 1.2;
     }
@@ -273,7 +289,27 @@ export class VrControls {
     return control?.def.id ?? null;
   }
 
+  /**
+   * Points the board's help button out to the pointer, or takes it away.
+   * Passing an object does not make it live: it is only picked while the
+   * board itself says the button is being offered.
+   */
+  setHelpTarget(target: THREE.Object3D | null): void {
+    this.helpTarget = target;
+  }
+
   private pick(hand: HandState): ControlObject | null {
+    const hit = this.pickAny(hand);
+    return hit.help ? null : hit.control;
+  }
+
+  /**
+   * Everything a ray can land on: the cockpit's controls and, when it is
+   * being offered, the board's help button. Whichever is nearest wins, so
+   * pointing through the board at a switch behind it does what it looks
+   * like it does.
+   */
+  private pickAny(hand: HandState): { control: ControlObject | null; help: boolean } {
     this.tempMatrix.identity().extractRotation(hand.controller.matrixWorld);
     this.origin.setFromMatrixPosition(hand.controller.matrixWorld);
     this.direction.set(0, 0, -1).applyMatrix4(this.tempMatrix).normalize();
@@ -281,17 +317,27 @@ export class VrControls {
     this.raycaster.near = 0;
     this.raycaster.far = 2.5;
 
-    const hits = this.raycaster.intersectObjects([...this.controlRig.pickTargets], false);
+    const targets: THREE.Object3D[] = [...this.controlRig.pickTargets];
+    if (this.helpTarget?.visible) targets.push(this.helpTarget);
+
+    const hits = this.raycaster.intersectObjects(targets, false);
     const first = hits[0];
-    if (!first) return null;
+    if (!first) return { control: null, help: false };
     this.hit.copy(first.point);
-    return this.controlRig.objectForMesh(first.object) ?? null;
+    if (first.object === this.helpTarget) return { control: null, help: true };
+    return { control: this.controlRig.objectForMesh(first.object) ?? null, help: false };
   }
 
   private onSelectStart(hand: HandState): void {
     // A withheld hand is reading the board, not reaching for a switch.
     if (this.suppressed[this.pointers.indexOf(hand)]) return;
-    const control = this.pick(hand);
+
+    const hit = this.pickAny(hand);
+    if (hit.help) {
+      this.callbacks.onRequestHelp();
+      return;
+    }
+    const control = hit.control;
     if (!control) return;
 
     hand.active = control;

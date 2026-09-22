@@ -1,8 +1,6 @@
 import type { ChecklistItem, ChecklistSection } from '../aircraft/types';
 import type { Simulation } from './Simulation';
 
-export type ChecklistMode = 'guided' | 'free';
-
 export interface ChecklistPosition {
   section: ChecklistSection;
   item: ChecklistItem;
@@ -22,8 +20,6 @@ const DWELL_SECONDS = 0.9;
  * simulation rather than taking their word for it.
  */
 export class ChecklistRunner {
-  mode: ChecklistMode = 'guided';
-
   private sectionIndex = 0;
   private itemIndex = 0;
   private satisfiedFor = 0;
@@ -45,6 +41,19 @@ export class ChecklistRunner {
 
   get finished(): boolean {
     return this.position === null;
+  }
+
+  /**
+   * The control the current item wants pointed at, or null.
+   *
+   * Resolved here rather than read off the item, because a step about a row
+   * of controls has to work out which one still needs doing — and every
+   * overlay, on a screen and in a headset, must agree about the answer.
+   */
+  get highlight(): string | null {
+    const item = this.position?.item;
+    if (!item) return null;
+    return item.highlightNow?.(this.sim) ?? item.highlight ?? null;
   }
 
   get allSections(): readonly ChecklistSection[] {
@@ -87,22 +96,9 @@ export class ChecklistRunner {
       .flatMap((s) => s.items as ChecklistItem[]);
   }
 
-  /** Progress toward starting the aeroplane, ignoring the shutdown drill. */
-  get goalProgress(): number {
-    const items = this.goalItems;
-    if (items.length === 0) return 1;
-    const done = items.filter((i) => this.done.has(i.id)).length;
-    return done / items.length;
-  }
-
-  /** True once the aeroplane is started: the end of a timed run. */
+  /** True once the aeroplane is started, which is the moment worth marking. */
   get goalReached(): boolean {
     return this.goalItems.every((i) => this.done.has(i.id));
-  }
-
-  /** Skips the current item without marking it complete. */
-  skip(): void {
-    this.advance();
   }
 
   restart(): void {
@@ -110,14 +106,6 @@ export class ChecklistRunner {
     this.itemIndex = 0;
     this.satisfiedFor = 0;
     this.done.clear();
-  }
-
-  /** Jumps straight to a section, for practising one phase repeatedly. */
-  jumpToSection(index: number): void {
-    if (index < 0 || index >= this.sections.length) return;
-    this.sectionIndex = index;
-    this.itemIndex = 0;
-    this.satisfiedFor = 0;
   }
 
   onAdvance(listener: (item: ChecklistItem) => void): () => void {

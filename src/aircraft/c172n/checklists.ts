@@ -86,6 +86,12 @@ export const C172N_CHECKLISTS: readonly ChecklistSection[] = [
       {
         id: 'breakers-in',
         callout: 'CIRCUIT BREAKERS — CHECK IN',
+        // Eighteen identical buttons, and the step is to find the one that
+        // is out — so what the arrow points at is whichever that happens to
+        // be, and it moves on as each is pushed in. A fixed highlight would
+        // give the answer away before the scan, and none at all leaves the
+        // one step on the list with no help available.
+        highlightNow: (s) => BREAKER_IDS.find((id) => !s.controls.bool(id)) ?? null,
         satisfied: (s) => BREAKER_IDS.every((id) => s.controls.bool(id)),
         why: 'A breaker left popped from the last flight means that circuit is dead, and you will not find out until you need it. Check them by eye and by feel.',
         hint: 'Push any breaker that is standing proud of the panel back in.',

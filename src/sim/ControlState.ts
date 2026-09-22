@@ -101,10 +101,11 @@ export class ControlState {
 function initialValue(def: ControlDef): number {
   switch (def.kind) {
     case 'toggle':
-      return 0;
+      return def.initial ? 1 : 0;
     case 'breaker':
-      // Breakers are set (pushed in) on a healthy aeroplane.
-      return 1;
+      // Breakers are set (pushed in) on a healthy aeroplane, unless this one
+      // is meant to be found popped.
+      return def.popped ? 0 : 1;
     case 'pushPull':
       return def.initial ?? 0;
     case 'selector':

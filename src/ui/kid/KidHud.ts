@@ -2,9 +2,7 @@ import type { AircraftDefinition, ChecklistItem } from '../../aircraft/types';
 import type { Simulation } from '../../sim/Simulation';
 import type { Fault } from '../../sim/Faults';
 import { ChecklistRunner } from '../../sim/Checklist';
-import type { QualityLevel } from '../../render/postfx';
-import type { ControlDescription } from '../describeControl';
-import type { HudCallbacks, TrainerHud } from '../TrainerHud';
+import type { ControlDescription, HudCallbacks } from '../overlay';
 import { windowChecklist, type VrCardContent } from '../VrChecklistCard';
 import type { VrSupport } from '../../input/VrSession';
 import { KID_FAULTS, KID_PRAISE, KID_UI, kidStep, type KidStep } from './swedish';
@@ -32,21 +30,22 @@ const el = <K extends keyof HTMLElementTagNameMap>(
 };
 
 /**
- * The Swedish overlay for a child who can read.
+ * The overlay: Swedish, for a child who can read.
  *
- * It runs the *same* checklist as the expert HUD, every item of it, against
- * the same simulation — the aeroplane is not made easier. What changes is
- * everything around the aeroplane: one step on screen at a time, in words a
- * six-year-old can act on, with the control lit up and the camera already
- * pointed at it, and a mistake answered with what to do next rather than
- * what went wrong.
+ * It runs the real checklist, every item of it, against the real simulation.
+ * The aeroplane is not made easier — a flooded engine still has to be
+ * cleared by the book — and nothing about the procedure is dropped. What is
+ * built for a six-year-old is everything *around* the aeroplane: one step on
+ * screen at a time in words they can act on, help that arrives only when
+ * they ask for it, and a mistake answered with what to do next rather than
+ * with what went wrong.
  *
- * Two deliberate omissions. There is no timed mode, because a clock turns a
- * first attempt into a test. And there is no systems read-out, because a
- * child who cannot yet read "suction 4.8 inHg" only learns that part of the
- * screen is not for them.
+ * Two deliberate omissions. There is no clock, because a clock turns a first
+ * attempt into a test. And there is no systems read-out, because a child who
+ * cannot yet read "suction 4.8 inHg" only learns that part of the screen is
+ * not for them.
  */
-export class KidHud implements TrainerHud {
+export class KidHud {
   readonly checklist: ChecklistRunner;
 
   private readonly root: HTMLElement;
@@ -64,7 +63,6 @@ export class KidHud implements TrainerHud {
   private readonly cardEl: HTMLElement;
   private readonly fillEl: HTMLElement;
   private readonly planeEl: HTMLElement;
-  private readonly countEl: HTMLElement;
   private readonly toastsEl: HTMLElement;
   private readonly tooltipEl: HTMLElement;
   private readonly finishEl: HTMLElement;
@@ -76,6 +74,8 @@ export class KidHud implements TrainerHud {
   private itemAge = 0;
   private praiseIndex = 0;
   private celebrated = false;
+  /** Set once the child has pressed "Var är den?" for the current step. */
+  private helpShown = false;
   private tooltipAt: { x: number; y: number } | null = null;
 
   constructor(
@@ -102,20 +102,17 @@ export class KidHud implements TrainerHud {
     bar.append(brand);
 
     const tools = el('div', 'kid-tools');
-    this.soundBtn = this.toolButton(`🔊 ${KID_UI.sound}`, () =>
+    this.soundBtn = this.toolButton('🔊', KID_UI.sound, () =>
       this.callbacks.onToggleSound(this.soundBtn.getAttribute('aria-pressed') !== 'true'),
     );
     tools.append(this.soundBtn);
-    tools.append(this.toolButton(KID_UI.reset, () => this.callbacks.onReset()));
+    tools.append(this.toolButton('↺', KID_UI.reset, () => this.callbacks.onReset()));
     // Hidden until a headset is actually there. A disabled button explaining
-    // a certificate problem is noise to a six-year-old; the grown-up can read
-    // the real reason on the expert HUD.
-    this.vrBtn = this.toolButton(`🥽 ${KID_UI.vr}`, () => this.callbacks.onEnterVr());
+    // a certificate problem is noise to a six-year-old, and the reasons a
+    // headset might be unavailable are a grown-up's problem.
+    this.vrBtn = this.toolButton('🥽', KID_UI.vr, () => this.callbacks.onEnterVr());
     this.vrBtn.hidden = true;
     tools.append(this.vrBtn);
-    const adults = this.toolButton(KID_UI.adults, () => this.callbacks.onSelectUiMode('expert'));
-    adults.classList.add('kid-quiet');
-    tools.append(adults);
     bar.append(tools);
     this.root.append(bar);
 
@@ -123,8 +120,10 @@ export class KidHud implements TrainerHud {
     const track = el('div', 'kid-track');
     this.fillEl = el('i');
     this.planeEl = el('span', 'kid-plane', '✈️');
-    this.countEl = el('b', 'kid-count');
-    track.append(this.fillEl, this.planeEl, this.countEl);
+    // No count beside it. "0 / 24" is a number to a grown-up and a long way
+    // to go to a child; the aeroplane moving along the bar says the same
+    // thing without anyone having to read it.
+    track.append(this.fillEl, this.planeEl);
     this.root.append(track);
 
     /* ------------------------------ card ------------------------------ */
@@ -184,6 +183,7 @@ export class KidHud implements TrainerHud {
     if ((pos?.item.id ?? null) !== this.lastItemId) {
       this.lastItemId = pos?.item.id ?? null;
       this.itemAge = 0;
+      this.helpShown = false;
       this.render();
       // Finding the control is handled by the arrow in the scene, which
       // flies to it and waits. Moving the camera on their behalf is saved
@@ -207,6 +207,7 @@ export class KidHud implements TrainerHud {
     this.checklist.restart();
     this.lastItemId = null;
     this.itemAge = 0;
+    this.helpShown = false;
     this.celebrated = false;
     this.finishEl.hidden = true;
     this.toastsEl.replaceChildren();
@@ -242,7 +243,7 @@ export class KidHud implements TrainerHud {
   }
 
   setSoundState(on: boolean): void {
-    this.soundBtn.textContent = `${on ? '🔊' : '🔇'} ${KID_UI.sound}`;
+    this.soundBtn.textContent = on ? '🔊' : '🔇';
     this.soundBtn.setAttribute('aria-pressed', String(on));
   }
 
@@ -253,11 +254,16 @@ export class KidHud implements TrainerHud {
 
   setVrSupport(support: VrSupport): void {
     this.vrBtn.hidden = support !== 'available';
-    this.vrBtn.title = KID_UI.vrHint;
   }
 
   setVrPresenting(presenting: boolean): void {
-    this.vrBtn.textContent = presenting ? `🥽 ${KID_UI.inVr}` : `🥽 ${KID_UI.vr}`;
+    // The glyph does not change — you are wearing the thing — so the state
+    // is carried by the name and by `aria-pressed`. The hint about the
+    // wrist goes on the button that offers the headset, which is the last
+    // thing read before the screen disappears.
+    const name = presenting ? KID_UI.inVr : `${KID_UI.vr} — ${KID_UI.vrHint}`;
+    this.vrBtn.setAttribute('aria-label', name);
+    this.vrBtn.title = name;
     this.vrBtn.setAttribute('aria-pressed', String(presenting));
   }
 
@@ -272,13 +278,10 @@ export class KidHud implements TrainerHud {
 
     if (!pos) {
       return {
-        theme: 'kid',
         glyph: '\u{1F634}',
-        title: KID_UI.title,
-        section: '',
         headline: KID_UI.allDone,
         detail: '',
-        hint: '',
+        help: '',
         progress: 1,
         stepLabel: `${this.totalItems} / ${this.totalItems}`,
         items: [],
@@ -288,17 +291,16 @@ export class KidHud implements TrainerHud {
 
     const step = kidStep(pos.item.id) ?? UNKNOWN;
     return {
-      theme: 'kid',
       // The picture carries the step; the words underneath are the caption.
+      // No "why" here: in a headset it is one more paragraph between a
+      // six-year-old and the switch, so it stays on the flat card where they
+      // can open it when they want it.
       glyph: step.icon,
-      title: KID_UI.title,
-      section: sectionName(pos.section.id),
       headline: step.title,
       detail: step.action,
-      // No "why" on the board. In a headset it is one more paragraph between
-      // a six-year-old and the switch; it stays on the flat card, where they
-      // can open it when they want it.
-      hint: '',
+      // The board carries its own "where is it?" button, because in a
+      // headset there is no other button to press.
+      help: this.helpShown || !this.checklist.highlight ? '' : KID_UI.showMe,
       progress: this.checklist.progress,
       stepLabel: KID_UI.stepOf(done + 1, this.totalItems),
       items: windowChecklist(this.checklist, (item) => {
@@ -311,21 +313,18 @@ export class KidHud implements TrainerHud {
 
   /* No view bar, no quality picker and no yoke toggle in the kid UI, so
    * these have nothing to keep in step with. */
-  setActiveView(): void {}
-  setInspecting(): void {}
-  setQuality(_level: QualityLevel): void {}
-  setYokeState(): void {}
-
   /* ------------------------------------------------------------------ */
   /* Rendering                                                           */
   /* ------------------------------------------------------------------ */
 
   private render(): void {
     const pos = this.checklist.position;
-    this.callbacks.onGuideControl(pos?.item.highlight ?? null);
+    // The arrow stays away until it is asked for. A six-year-old who is
+    // shown the answer to every step learns where to look on the screen,
+    // not where the switch is.
+    this.callbacks.onGuideControl(this.helpShown ? this.checklist.highlight : null);
 
     const done = Math.round(this.checklist.progress * this.totalItems);
-    this.countEl.textContent = `${done} / ${this.totalItems}`;
     const pct = this.totalItems === 0 ? 100 : (done / this.totalItems) * 100;
     this.fillEl.style.width = `${pct}%`;
     this.planeEl.style.left = `${pct}%`;
@@ -346,14 +345,15 @@ export class KidHud implements TrainerHud {
     }
 
     const step = kidStep(pos.item.id) ?? UNKNOWN;
-    this.chipEl.textContent = `${KID_UI.stepOf(done + 1, this.totalItems)} · ${sectionName(
-      pos.section.id,
-    )}`;
+    // Just what you are doing — "Gör dig klar". The step number was a count
+    // of how much was left, on the one line that should say what is
+    // happening now.
+    this.chipEl.textContent = sectionName(pos.section.id);
     this.iconEl.textContent = step.icon;
     this.titleEl.textContent = step.title;
     this.actionEl.textContent = step.action;
     this.whyEl.textContent = step.why;
-    this.showBtn.hidden = !pos.item.highlight;
+    this.showBtn.hidden = !this.checklist.highlight;
     this.whyBtn.hidden = false;
 
     // Retrigger the entry animation so a new step is impossible to miss.
@@ -363,12 +363,28 @@ export class KidHud implements TrainerHud {
   }
 
   /**
-   * The impatient route. The arrow is already pointing, so this is for a
-   * child who would rather be taken there than turn and look — an explicit
-   * press, never something that happens to them.
+   * Points the arrow at the control. Nothing does this on its own: the whole
+   * game is finding the switch, and an arrow that arms itself on every step
+   * answers the question before it has been asked.
+   */
+  requestHelp(): void {
+    const id = this.checklist.highlight;
+    if (!id) return;
+    this.helpShown = true;
+    this.callbacks.onGuideControl(id);
+    this.stuckEl.hidden = true;
+    this.showBtn.classList.remove('nudge');
+  }
+
+  /**
+   * The button. It arms the arrow and then takes them there, which is the
+   * part that has to be asked for — turning somebody's head for them is
+   * disorienting on a screen and worse in a headset, where the board calls
+   * `requestHelp` on its own instead.
    */
   private showMe(): void {
-    const id = this.checklist.position?.item.highlight;
+    const id = this.checklist.highlight;
+    this.requestHelp();
     if (id) this.callbacks.onShowControl(id);
   }
 
@@ -436,9 +452,20 @@ export class KidHud implements TrainerHud {
     );
   }
 
-  private toolButton(label: string, onClick: () => void): HTMLButtonElement {
-    const btn = el('button', 'kid-tool', label);
+  /**
+   * A button in the top bar: the glyph, and the word only where it does not
+   * take up room.
+   *
+   * These are the grown-up's controls, in the corner the child is not meant
+   * to be reading, and three labelled pills up there compete with the one
+   * thing on screen that matters. The Swedish stays on as the button's name,
+   * so hovering it and reading it aloud both still say what it does.
+   */
+  private toolButton(icon: string, name: string, onClick: () => void): HTMLButtonElement {
+    const btn = el('button', 'kid-tool', icon);
     btn.type = 'button';
+    btn.setAttribute('aria-label', name);
+    btn.title = name;
     btn.addEventListener('click', onClick);
     return btn;
   }

@@ -2,17 +2,27 @@
 
 An interactive 3D cockpit in the browser, built to teach one thing properly:
 how to start a light aircraft engine, and why each step of the checklist
-exists.
+exists. **The interface is in Swedish, for a child who can read** — the goal
+it is built around is narrow and testable: a six-year-old sits down in front
+of a cold aeroplane and gets the engine running without an adult reading the
+screen for them.
 
 It is not a flight simulator — the aeroplane never moves. But everything from
 the battery master to the oil pressure gauge is simulated, the checklist is
 verified against that simulation rather than taken on trust, and the mistakes
-people actually make are modelled and explained.
+people actually make are modelled and explained. None of that is softened for
+the audience: it runs the whole POH procedure, including the breaker scan and
+the shutdown drill, so the aeroplane is exactly as easy or as hard to start
+as it is for anyone else. What is pitched at a six-year-old is the layer of
+help on top, not the aeroplane underneath.
 
 | Aircraft | Engine | What it teaches |
 |---|---|---|
 | Cessna 172N Skyhawk | Carburetted Lycoming O-320 | Primer strokes, carburettor heat, flooded-engine recovery |
-| Cessna 172S Skyhawk SP | Fuel-injected Lycoming IO-360 | Boost-pump priming, cranking at idle cutoff, advancing the mixture as it fires |
+
+One aeroplane, done properly. The definition format is general enough for
+others — see **Adding an aircraft** below — but everything here is aimed at
+the 172N's own procedure rather than at being a platform.
 
 ## Running it
 
@@ -64,27 +74,13 @@ texture, the instrument faces and the engine sound are generated at runtime.
 |---|---|
 | Look around | Drag anywhere that is not a control (right-drag always looks) |
 | Zoom | Scroll |
-| Jump to an area | Number keys `1`–`6`, or the bar along the bottom |
+| Jump to an area | Number keys `1`–`6` |
 | Operate a switch | Click it |
 | Pull or push a knob | Drag it up to push in, down to pull out |
 | Turn a selector or the key | Click to step round a detent, or drag |
 | Crank the starter | Press **and hold** on the ignition key at START |
-| Hide the control wheel | `Y`, or the "Hide yoke" button |
-| Hand it to a six-year-old | The "🧒 Barnläge" button — see below |
+| Hide the control wheel | `Y` |
 | Free orbit camera (dev) | `Shift`+`O`; `Esc` returns you to the seat |
-
-**Practice** mode highlights the control the current item asks for, verifies
-you did it, and explains why the step is there. **Timed** mode runs a clock
-from go until the engine is running and the after-start items are done.
-
-| Difficulty | What you get | Mistake penalty |
-|---|---|---|
-| Easy | Next item, why it matters, control lit up | +5 s |
-| Normal | The checklist and your progress — no reasoning, nothing highlighted | +10 s |
-| Hard | Nothing. Start it from memory. | +15 s |
-
-Difficulty changes only how much the trainer tells you; the aeroplane behaves
-identically at every level. Mistakes cost time rather than ending the run.
 
 **The control wheel is slightly see-through.** It sits squarely between the
 pilot and the bottom of the panel — where the throttle quadrant, the switch
@@ -105,40 +101,59 @@ including the ones usually hand-waved: throwing the seat latch, working the
 door handle, closing the cabin door. The propeller-area check reads your
 head direction, so you have to actually look out of both windows.
 
-## Barnläge
+**And the aeroplane is found as the last pilot left it**, which is not the
+same as found tidy. The carburettor heat is out, the avionics master is on,
+and the alternator field breaker is standing proud of the panel — so
+"CARBURETTOR HEAT — COLD", "AVIONICS POWER SWITCH — OFF" and "CIRCUIT
+BREAKERS — CHECK IN" are all things you do rather than things that are
+already true. A step that ticks itself the moment the list reaches it looks
+like nothing is wrong — the list just advances a line — and it is exactly
+the step that would have explained what the switch is for.
+`tests/checklist-actions.test.ts` fails if a new one appears.
 
-A second overlay, in Swedish, for a child who can read. The goal it is built
-around is narrow and testable: a six-year-old sits down in front of a cold
-aeroplane and gets the engine running without an adult reading the screen for
-them.
+The breaker is the one worth finding. With it out the aeroplane starts
+normally, runs normally and never charges, so a pilot who waved the scan
+through meets the consequence two minutes later at "AMMETER — CHECK
+CHARGING", with the low-voltage light on.
 
-Everything under the overlay is unchanged. It runs the same `ChecklistRunner`
-over the same items — all of them, including the breakers and the shutdown
-drill — against the same simulation, so the aeroplane is exactly as easy or as
-hard to start as it is for anyone else. What changes is the layer of help:
+## The overlay
+
+There is one overlay and it is the Swedish one. What it does:
 
 - one step on screen at a time, with a picture cue, a title of three or four
   words, and a single sentence saying what to physically do;
-- an arrow flies to the control and nods at it, because the thing most likely
-  to stall a six-year-old is not knowing the procedure but not finding the
-  switch. *Var är den?* additionally takes them there, but only when asked;
+- *Var är den?* sends an arrow to the control and takes them there. Nothing
+  points at anything until that button is pressed: the thing most likely to
+  stall a six-year-old is not knowing the procedure but not finding the
+  switch, and a child who is shown the answer to every step learns where to
+  look on the screen rather than where the switch is. If they sit on a step
+  long enough, the button nudges;
 - *Varför då?* opens the reason for the step, rewritten to answer "what
   happens if I don't" rather than "what the system does";
 - mistakes are answered with the fix and never in red — flooding the engine
   gets the clearing procedure, not a telling-off;
-- no clock, and no systems read-out, because a child who cannot yet read
-  "suction 4.8 inHg" only learns that part of the screen is not for them.
+- no clock, no difficulty setting, no systems read-out and no score. A child
+  who cannot yet read "suction 4.8 inHg" only learns that part of the screen
+  is not for them, and a clock turns a drill you are meant to think your way
+  through into one you rush.
 
 The Swedish lives in one file, `src/ui/kid/swedish.ts`: a step per checklist
 item, a message per fault code, and a name per control. Nothing is generated
-or translated at runtime. `tests/kid-copy.test.ts` fails if an aircraft gains
-a checklist item with no Swedish copy, if copy is left behind for an item that
-no longer exists, or if a sentence grows past twenty words.
+or translated at runtime. `tests/kid-copy.test.ts` fails if a checklist item
+gains no Swedish copy, if copy is left behind for an item that no longer
+exists, or if a sentence grows past twenty words.
 
-Switch in with **🧒 Barnläge** in the top left, and back out with *För vuxna*.
-The choice is remembered, so a reload does not hand a child a wall of English.
-VR is deliberately left out of it: the in-headset checklist card is English,
-and a child in a headset cannot be handed the mouse.
+There was an English expert overlay beside it — a timed challenge with
+difficulty levels, a systems read-out, a view bar and a mode switch — and it
+is gone. Two interfaces over one simulation meant every feature had to be
+designed, styled and tested twice, and the one that mattered was never the
+one being worked on. Anything a grown-up wants from it, they can have in
+Swedish. What is left is `index.html`, a canvas and one overlay: hand someone
+the link and they get the thing, with nothing to find first.
+
+The address is just the site now. `?mode=kid` and `?kid` are no longer read —
+they do nothing rather than fail, so a bookmark or a home-screen shortcut
+made when they meant something still lands on the trainer.
 
 ## What is simulated
 
@@ -147,7 +162,9 @@ and a child in a headset cannot be handed the mouse.
   current draw, ammeter, low-voltage warning. Continuous cranking flattens the
   battery in about ninety seconds.
 - **Fuel** — two tanks, selector valve, carburettor float bowl, primer
-  strokes, boost-pump priming on the injected aircraft.
+  strokes. The engine model also carries the fuel-injected case — priming on
+  the boost pump rather than the primer — which no aircraft in the registry
+  uses today.
 - **Ignition** — magnetos live regardless of the master, spring-loaded START
   detent, starter duty cycle with thermal lockout.
 - **Engine** — state machine over `off → cranking → catching → running →
@@ -171,6 +188,7 @@ turns into plain language:
 | Mixture at idle cutoff (carburetted) | Cranks and cranks, never fires |
 | Fuel selector OFF | Catches on the float bowl, runs, then quits |
 | Master switch off | Starter does not turn; panel is dead |
+| Alternator field breaker left popped | Starts and runs perfectly, but never charges and the low-voltage light stays on |
 | No prime on a cold engine | Will not catch |
 | Over-prime (8+ strokes, or 7+ s of boost pump) | Flooded; only the POH clearing procedure recovers it |
 | Crank for more than fifteen seconds | Starter thermal lockout, then a cooling period |
@@ -181,11 +199,25 @@ turns into plain language:
 
 ## Pointing at things
 
-Guided mode has always put a pulsing halo on the control the checklist wants.
-A halo only helps once you are already looking at the control, though — which
-is the moment you no longer need it. `render/GuideArrow.ts` is the other half:
-an arrow that hovers just off the control on the pilot's side of it, nodding,
-in the same amber and on the same pulse as the halo.
+**Help is asked for, never given.** No hint appears on a timer, no arrow arms
+itself on arrival at a step, and no halo lights until the pilot presses *Var
+är den?*. Finding the switch is part of the drill, and
+help that arrives unasked turns a checklist into a wizard: you stop reading
+the aeroplane and start waiting for the interface. The button is always
+there, so nothing is ever out of reach; it just has to be pressed.
+
+A step about a *row* of controls points at whichever one still needs doing:
+ask for help on the breaker scan and the arrow finds the breaker that is
+actually out, not the row in general. Without that, the one step on the list
+where you most want a pointer is the one step that has nothing to point at —
+the help is not withheld, it does not exist, which is more confusing than
+help that is refused.
+
+Once it is asked for, the control gets a pulsing halo. A halo only helps once you are
+already looking at the control, though — which is the moment you no longer
+need it. `render/GuideArrow.ts` is the other half: an arrow that hovers just
+off the control on the pilot's side of it, nodding, in the same amber and on
+the same pulse as the halo.
 
 When the control is outside the view it parks in front of the pilot instead
 and tilts the way they need to turn; turn that way and it flies to the
@@ -196,6 +228,14 @@ makes the arrow flap.
 It is in the scene rather than in the overlay for two reasons. It works in a
 headset, where there is no DOM. And it replaces moving the pilot's viewpoint
 for them, which is disorienting on a monitor and close to unacceptable in VR.
+
+**In a headset the button is on the wrist board**, because the board is the
+entire interface: there is nowhere else to put it, and a rule that help must
+be asked for is worthless if there is no way to ask. It is the only thing on
+the board you can press — point at it and pull the trigger, and the arrow
+arms without your viewpoint moving a millimetre. When there is nothing to ask
+for the button is not drawn, and its hit plane goes with it, so a trigger
+pull aimed at a switch behind the board reaches the switch.
 
 ## Virtual reality
 
@@ -213,9 +253,8 @@ much, rather than blurring the part you are trying to read. Raise it toward 1
 for sharpness, drop it toward 0.7 for frames. It has to be set before the
 session starts.
 
-Press **Enter VR** with a WebXR headset connected — from either overlay;
-Barnläge offers it too, so a child can fly the Swedish version in a headset.
-The reference space is `local`, so wherever your head is becomes the left
+Press **VR-glasögon** with a WebXR headset connected. The reference space is
+`local`, so wherever your head is becomes the left
 seat. Both controllers get a pointer ray, and every gesture runs through the
 same `ControlObject` interface the mouse uses — so the spring-loaded starter
 detent and the drag scaling behave identically in VR with no duplicated
@@ -278,18 +317,14 @@ wherever the step text happened to end, so a long callout with a long reason
 pushed it off the bottom and the checklist vanished while the board still
 looked fine. The step text is capped and ellipsised to fit above it instead.
 
-The board is a dumb renderer: each overlay hands it a `VrCardContent`, so the
-expert HUD supplies POH English and Barnläge supplies Swedish, and neither
-the board nor the simulation has to know which is in play. The two are laid
-out quite differently. The expert board is mostly words, because the words
-are the content. **The kid board is mostly picture**: one large glyph for the
-step, the step in a few words, one short line of what to do, and the rest of
-the list as a row of pictures rather than a column of Swedish to read through
-to find your place. The reasoning is dropped from it entirely — in a headset
-it is one more paragraph between a six-year-old and the switch, and it stays
-on the flat card where they can open it when they want it. A hard-mode timed
-run gets the callout and nothing else — a board on your wrist would otherwise
-be a way round the difficulty.
+The board is a dumb renderer: the overlay hands it a `VrCardContent` and it
+draws that, so neither the board nor the simulation has to know what is on
+the checklist. **It is mostly picture**: one large glyph for the step, the
+step in a few words, one short line of what to do, and the rest of the list
+as a row of pictures rather than a column of Swedish to read through to find
+your place. The reasoning is dropped from it entirely — in a headset it is
+one more paragraph between a six-year-old and the switch, and it stays on the
+flat card where they can open it when they want it.
 
 ## Architecture
 
@@ -303,7 +338,6 @@ src/
     Simulation.ts      root; fixed-substep tick
     ControlState.ts    id → numeric value, the single source of truth
     Checklist.ts       verifies checklist items against the simulation
-    Challenge.ts       the timed game: difficulty, penalties, best times
     PilotState.ts      where the pilot is looking, for the prop-area check
     Faults.ts          typed failures with plain-language explanations
     systems/           Electrical, Fuel, Ignition, Engine, Vacuum
@@ -311,7 +345,7 @@ src/
     types.ts           ControlDef, InstrumentDef, ChecklistItem, params
     registry.ts        the list of available aircraft
     shared/            panel furniture and the steam-gauge panel builder
-    c172n/ c172s/      panel, instruments, checklists, systems per type
+    c172n/             panel, instruments, checklists, systems
   render/         three.js; knows about control *kinds*, not aeroplanes
     GuideArrow.ts      points at the control guided mode is asking for
     loft.ts            lofted surfaces
@@ -322,10 +356,10 @@ src/
     postfx.ts          GTAO, vignette and SMAA composer chain
   input/          seated camera, pointer gesture router, WebXR controllers
   audio/          procedural WebAudio engine, starter and switch sounds
-  ui/             DOM overlay: checklist, coaching, tooltips, status
-    TrainerHud.ts      what App needs from an overlay; Hud and KidHud both fit
+  ui/             the overlay: checklist, coaching, tooltip
+    overlay.ts         what the overlay needs from App, and vice versa
     VrChecklistCard.ts the wrist board, for when there is no DOM
-    kid/               the Swedish child overlay and all of its copy
+    kid/               the overlay itself, its stylesheet and all of its copy
 ```
 
 **Adding an aircraft.** Everything an aeroplane *is* lives under
@@ -335,9 +369,16 @@ helpers in `aircraft/shared/kit.ts`), `checklists.ts` (the procedure, with a
 `satisfied` predicate and a `why` per item), and `index.ts` to assemble them.
 Register it in `aircraft/registry.ts`. The renderer switches on `ControlKind`
 to pick a mesh factory and a drag gesture, and the simulation only reads
-control values by id, so neither needs to change. The C172S is the worked
-example: three data modules plus a call to the same panel builder the C172N
-uses.
+control values by id, so neither needs to change.
+
+**How far that actually goes** is worth saying plainly, because it is easy to
+over-claim. Another mark of 172 is genuinely three data modules and a call to
+the same panel builder. An aeroplane whose cockpit is a different *room* —
+different cabin, different panel proportions, its own viewpoints — is not,
+and neither is one whose engine is a different class of machine: those need
+the renderer and the simulation to grow, not just the data. The format is a
+good way to describe a light single's panel, not a universal aircraft
+description.
 
 **Coordinates.** World axes are `+X` right, `+Y` up, `−Z` forward, origin on
 the cabin floor on the centreline at the seat datum. Panel-mounted things are
@@ -362,22 +403,44 @@ in.
 - an attitude-indicator test that it starts toppled, never finds level with
   the rotor stopped, erects after a start, comes up to speed well before it
   finishes erecting, and topples again after shutdown;
-- a registry test that every aircraft builds and every checklist item
+- a registry test that the aircraft builds and every checklist item
   references a control that exists;
+- an actions test that no step before the start is already satisfied on a
+  cold and dark aeroplane, which is what stops the aeroplane quietly
+  becoming tidy again;
+- a walk-through test that flies the whole procedure one item at a time,
+  doing what each step asks and asserting that the *next* one is not already
+  true. That is the other half of the same problem: a step can be false at
+  reset and still tick itself later, as a side effect of an earlier step, and
+  no amount of reading the aeroplane at rest will show it. Three items are
+  declared as observations rather than actions — oil pressure, the ammeter
+  check and the shutdown's first throttle setting — because you arrive at
+  them having already done the thing that makes them true, and the step is
+  there to make you look. The same test fails if an item cannot be satisfied
+  at all, which is the worst authoring mistake available: the list stops and
+  nothing on screen says why;
+- a cockpit assembly test that builds the 3D cockpit in node against a stub
+  canvas and checks every control is mounted, pickable and somewhere inside
+  the hull — an instrument whose build function throws is a black screen, not
+  a wrong number;
 - a panel-fit test that every instrument, control and placard lies inside the
   panel outline, and the outline inside the cabin — plus a rotary-lettering
   test, because a selector is as wide as its position names and not as wide
   as its knob, which is how the ignition switch's ring of OFF/R/L/BOTH/START
   came to be part-buried in the lining;
-- a copy test that every checklist item of every aircraft has Swedish child
-  wording, and that none of it has drifted back towards POH phrasing;
+- a copy test that every checklist item has Swedish child wording, that none
+  of it has drifted back towards POH phrasing, and that no copy is left
+  behind for a step that no longer exists;
 - a guide-arrow test that the arrow aims at the control, hovers on the
   pilot's side of it, parks in front when the control is out of view and
   flies back to it when the pilot turns;
 - a VR-support test that the three ways WebXR can be unavailable are told
   apart, since they have completely different fixes;
 - a wrist-board test that the slice of checklist it shows stays centred on
-  the current item and spans section boundaries.
+  the current item and spans section boundaries, and that the board's help
+  button is in the raycaster's way exactly while it is drawn — a board that
+  quietly swallowed trigger pulls aimed at the switches behind it would be
+  worse than one with no button at all.
 
 The two `src/render/` tests need no DOM and no renderer: panel fit is
 arithmetic over the hull loft, and the arrow's placement is arithmetic over a

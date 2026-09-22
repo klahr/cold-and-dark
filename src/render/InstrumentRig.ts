@@ -26,7 +26,11 @@ export class InstrumentRig {
       root.name = `instrument:${def.id}`;
       const m = def.mount;
       root.position.set(m.x, m.y, m.z ?? 0);
-      if (m.roll) root.rotation.z = m.roll;
+      // Same convention as a control's mount. An instrument that is not
+      // bolted flat to the panel — the wet compass, up on the windscreen
+      // centre post — needs its tilt honoured, and silently dropping it
+      // leaves the instrument facing the wrong way with nothing to say so.
+      root.rotation.set(m.pitch ?? 0, m.yaw ?? 0, m.roll ?? 0, 'YXZ');
       frames[m.frame ?? 'panel'].add(root);
       this.handles.push(handle);
     }

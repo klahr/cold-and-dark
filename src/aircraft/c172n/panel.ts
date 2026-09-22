@@ -42,6 +42,13 @@ export const C172N_CONTROLS: readonly ControlDef[] = [
     mount: { x: -0.325, y: SWITCH_Y },
     width: 0.016,
     height: 0.026,
+    // Found on, as the last pilot left it. Starting it off made "AVIONICS
+    // POWER SWITCH — OFF" tick itself before the pilot had read it, and a
+    // step that is always already done is a step that teaches nothing — the
+    // same reasoning as the carburettor heat below. It is on the checklist
+    // precisely because it is found the wrong way round, and switching it
+    // is visible: the radio stack goes dark.
+    initial: true,
   },
 
   /* ---------------- Exterior and pitot heat ---------------- */
@@ -178,8 +185,13 @@ export const C172N_CONTROLS: readonly ControlDef[] = [
   ...cabinItems(-0.25),
 
   /* ---------------- Circuit breakers ---------------- */
+  // The alternator field breaker is found popped. It is the one worth
+  // finding: with it out the aeroplane starts perfectly normally, runs
+  // perfectly normally, and never charges — so a pilot who waved the
+  // breaker scan through meets the consequence at "AMMETER — CHECK
+  // CHARGING" two minutes later, with the low-voltage light on.
   ...breakerRow(0.16, [
-    ['brkAltField', 'ALT FLD', 5],
+    ['brkAltField', 'ALT FLD', 5, true],
     ['brkInstLights', 'INST LT', 5],
     ['brkNavLights', 'NAV LT', 10],
     ['brkBeacon', 'BCN', 10],

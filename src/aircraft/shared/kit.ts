@@ -86,14 +86,19 @@ export function masterRocker(x: number, y: number): ControlDef[] {
   ];
 }
 
-/** A row of circuit breakers across the copilot side of the panel. */
+/**
+ * A row of circuit breakers across the copilot side of the panel.
+ *
+ * The fourth element of an entry marks a breaker as found popped, which is
+ * what gives the "check in" step something to find.
+ */
 export function breakerRow(
   y: number,
-  entries: readonly (readonly [string, string, number])[],
+  entries: readonly (readonly [string, string, number, boolean?])[],
   startX = 0.205,
   pitch = 0.027,
 ): ControlDef[] {
-  return entries.map(([id, placard, amps], i) => ({
+  return entries.map(([id, placard, amps, popped], i) => ({
     id,
     kind: 'breaker' as const,
     label: `${placard} breaker`,
@@ -102,6 +107,7 @@ export function breakerRow(
     placardSize: 0.0032,
     mount: { x: startX + i * pitch, y },
     amps,
+    ...(popped ? { popped: true } : {}),
   }));
 }
 

@@ -26,6 +26,34 @@ describe('normal cold start', () => {
     expect(sim.faults.isActive('flooded')).toBe(false);
   });
 
+  /**
+   * The aeroplane is found with the alternator field breaker popped, which
+   * is what the breaker scan is on the checklist for. Skip the scan and
+   * everything about the start looks right: it cranks, it catches, it makes
+   * oil pressure — and it never charges. The consequence arrives two minutes
+   * later at "AMMETER — CHECK CHARGING", which is exactly where a pilot who
+   * waved the scan through should meet it.
+   */
+  it('starts but never charges with the alternator field breaker left out', () => {
+    const sim = newSim();
+    prepareForStart(sim, { breakers: false });
+    crank(sim, 3);
+    run(sim, 8);
+
+    expect(sim.engine.state).toBe('running');
+    expect(sim.controls.bool('brkAltField')).toBe(false);
+    expect(sim.electrical.alternatorOnline).toBe(false);
+    expect(sim.electrical.ammeter).toBeLessThan(0);
+    expect(sim.faults.isActive('low-voltage')).toBe(true);
+
+    // And pushing it in is all it takes to put right.
+    sim.controls.set('brkAltField', 1);
+    run(sim, 2);
+    expect(sim.electrical.alternatorOnline).toBe(true);
+    expect(sim.electrical.ammeter).toBeGreaterThan(0);
+    expect(sim.faults.isActive('low-voltage')).toBe(false);
+  });
+
   it('reaches 1000 RPM when the throttle is set for warm-up', () => {
     const sim = newSim();
     prepareForStart(sim);

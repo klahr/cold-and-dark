@@ -15,15 +15,12 @@ import { VrControls } from './input/VrControls';
 import { detectVrSupport, requestVrSession, type VrSupport } from './input/VrSession';
 import { VrChecklistCard } from './ui/VrChecklistCard';
 import { Simulation } from './sim/Simulation';
-import { Challenge } from './sim/Challenge';
 import { findAircraft, DEFAULT_AIRCRAFT_ID } from './aircraft/registry';
 import type { AircraftDefinition, ControlDef } from './aircraft/types';
 import { EYE } from './render/frame';
-import { Hud } from './ui/Hud';
 import { KidHud } from './ui/kid/KidHud';
-import type { HudCallbacks, TrainerHud, UiMode } from './ui/TrainerHud';
+import type { ControlDescription, HudCallbacks } from './ui/overlay';
 import { CockpitAudio } from './audio/CockpitAudio';
-import { describeControl, type ControlDescription } from './ui/describeControl';
 import { describeControlInSwedish } from './ui/kid/swedish';
 
 export class App {
@@ -49,8 +46,6 @@ export class App {
    */
   readonly guideArrow = new GuideArrow();
   readonly postfx: PostFx;
-  /** Timed-run state, kept across aircraft loads. */
-  readonly challenge = new Challenge();
   private readonly lighting: SceneLighting;
   private quality: QualityLevel = 'balanced';
   /** Rolling frame times, used to step the quality down if the GPU is struggling. */
@@ -67,11 +62,9 @@ export class App {
   sim!: Simulation;
   controlRig!: ControlRig;
   instrumentRig!: InstrumentRig;
-  hud!: TrainerHud;
+  hud!: KidHud;
   private aircraft!: AircraftDefinition;
   private pointer!: Pointer;
-  /** Which overlay is driving the cockpit; remembered between visits. */
-  private uiMode: UiMode = loadUiMode();
 
   private readonly timer = new THREE.Timer();
   private readonly canvas: HTMLCanvasElement;
@@ -211,26 +204,16 @@ export class App {
     );
   }
 
-  /**
-   * Builds the overlay for the current UI mode. Both implement `TrainerHud`
-   * and both drive the same simulation, so everything below this line is
-   * identical whichever one is on screen.
-   */
+  /** Builds the overlay and hands it everything it is allowed to do. */
   private buildHud(): void {
     const callbacks: HudCallbacks = {
-      onSelectView: (i) => this.selectView(i),
       onReset: () => this.resetAircraft(),
-      onFocusControl: (controlId) => this.focusControl(controlId),
       onShowControl: (controlId) => this.showControl(controlId),
       onGuideControl: (controlId) => {
         this.guidedControlId = controlId;
         this.controlRig.setGuided(controlId);
       },
       onToggleSound: (on) => this.setSound(on),
-      onToggleYokes: (visible) => this.setYokesVisible(visible),
-      onSelectAircraft: (nextId) => this.loadAircraft(nextId),
-      onSetQuality: (level) => this.setQuality(level),
-      onSelectUiMode: (mode) => this.setUiMode(mode),
       onEnterVr: () => {
         void this.enterVr().catch((err: unknown) => {
           console.error('Could not start the VR session', err);
@@ -238,50 +221,15 @@ export class App {
       },
     };
 
-    this.hud =
-      this.uiMode === 'kid'
-        ? new KidHud(this.overlay, this.aircraft, this.sim, callbacks)
-        : new Hud(this.overlay, this.aircraft, this.sim, this.challenge, callbacks);
-
-    this.hud.setQuality(this.quality);
+    this.hud = new KidHud(this.overlay, this.aircraft, this.sim, callbacks);
     this.hud.setSoundState(this.soundOn);
-    this.hud.setYokeState(this.yokesVisible);
-    this.hud.setActiveView(this.view.presetIndex);
-    this.hud.setInspecting(this.inspecting);
     if (this.vrSupport !== 'pending') this.hud.setVrSupport(this.vrSupport);
     if (this.renderer.xr.isPresenting) this.hud.setVrPresenting(true);
   }
 
-  /**
-   * Swaps the overlay without rebuilding the aeroplane around it.
-   *
-   * The aircraft is reset on the way through, in both directions: half a
-   * procedure done under one overlay's rules is not a state the other one
-   * can describe, and a child arriving at a cockpit someone else left
-   * half-started has no way to work out where they are.
-   */
-  setUiMode(mode: UiMode): void {
-    if (this.uiMode === mode) return;
-    this.uiMode = mode;
-    saveUiMode(mode);
-    this.hud.dispose();
-    this.buildHud();
-    this.resetAircraft();
-    // The switch happened on a button press, which is the user gesture an
-    // AudioContext needs. For a six-year-old the engine note is most of
-    // what confirms that the thing they just did worked.
-    if (mode === 'kid') this.setSound(true);
-  }
-
-  get uiModeName(): UiMode {
-    return this.uiMode;
-  }
-
-  /** Hover read-out, in whichever language the current overlay speaks. */
+  /** Hover read-out. The cockpit speaks one language. */
   private describe(def: ControlDef): ControlDescription | null {
-    return this.uiMode === 'kid'
-      ? describeControlInSwedish(def, this.sim)
-      : describeControl(def, this.sim);
+    return describeControlInSwedish(def, this.sim);
   }
 
   start(): void {
@@ -315,7 +263,6 @@ export class App {
   selectView(index: number): void {
     if (this.inspecting) this.toggleInspect(false);
     this.view.setPreset(index);
-    this.hud.setActiveView(index);
   }
 
   /**
@@ -332,7 +279,6 @@ export class App {
     this.lighting.sun.shadow.needsUpdate = true;
     this.postfx.applyQuality(spec);
     this.postfx.setSize(window.innerWidth, window.innerHeight);
-    this.hud?.setQuality(level);
   }
 
   get qualityLevel(): QualityLevel {
@@ -469,8 +415,14 @@ export class App {
         // a tracked hand's wrist. Until there is one, it stays clipped
         // beside the panel.
         onLeftAnchorChanged: (anchor) => this.vrCard.attachToWrist(anchor, this.rig),
+        // The board's own button. It arms the arrow but deliberately does
+        // not move the pilot: turning somebody's head for them is unpleasant
+        // on a screen and worse in a headset.
+        onRequestHelp: () => this.hud.requestHelp(),
       },
     );
+
+    this.vrControls.setHelpTarget(this.vrCard.helpTarget);
 
     this.renderer.xr.addEventListener('sessionstart', () => this.onVrStart());
     this.renderer.xr.addEventListener('sessionend', () => this.onVrEnd());
@@ -498,15 +450,6 @@ export class App {
   private onVrEnd(): void {
     this.rig.position.set(0, 0, 0);
     this.hud.setVrPresenting(false);
-  }
-
-  /** Aims the pilot's head at a control the checklist is asking for. */
-  private focusControl(id: string): void {
-    const obj = this.controlRig.objectFor(id);
-    if (!obj) return;
-    const world = new THREE.Vector3();
-    obj.object.getWorldPosition(world);
-    this.view.lookAtPoint(world);
   }
 
   /**
@@ -548,7 +491,6 @@ export class App {
    */
   toggleInspect(on = !this.inspecting): void {
     this.inspecting = on;
-    this.hud?.setInspecting(on);
     if (!on) {
       if (this.inspectControls) this.inspectControls.enabled = false;
       return;
@@ -614,7 +556,6 @@ export class App {
       }
       if (e.key === 'y' || e.key === 'Y') {
         this.setYokesVisible(!this.yokesVisible);
-        this.hud.setYokeState(this.yokesVisible);
         return;
       }
       const n = Number(e.key);
@@ -644,30 +585,6 @@ function offAxisAngle(preset: ViewPreset, point: THREE.Vector3): number {
   const toPoint = point.clone().sub(eye);
   if (toPoint.lengthSq() < 1e-8) return Math.PI;
   return forward.angleTo(toPoint.normalize());
-}
-
-const UI_MODE_KEY = 'cold-and-dark:ui-mode';
-
-/**
- * The overlay choice survives a reload. Once a grown-up has set the cockpit
- * up for a child, refreshing the page should not hand back a wall of
- * English.
- */
-function loadUiMode(): UiMode {
-  try {
-    return localStorage.getItem(UI_MODE_KEY) === 'kid' ? 'kid' : 'expert';
-  } catch {
-    // Storage blocked or unavailable. The expert HUD is the safe default.
-    return 'expert';
-  }
-}
-
-function saveUiMode(mode: UiMode): void {
-  try {
-    localStorage.setItem(UI_MODE_KEY, mode);
-  } catch {
-    // Nothing to do: the mode still applies for this visit.
-  }
 }
 
 /** Different control kinds make different noises when you move them. */

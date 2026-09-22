@@ -58,6 +58,13 @@ interface ControlBase {
 export interface ToggleControl extends ControlBase {
   kind: 'toggle';
   style: 'rocker' | 'paddle';
+  /**
+   * Where the switch is found on a cold and dark aeroplane. Defaults to off.
+   *
+   * A boolean rather than the `number` the other kinds take, because a
+   * switch has two positions and "initial: 0.5" should not be expressible.
+   */
+  initial?: boolean;
   /** Rocker body size in metres. */
   width?: number;
   height?: number;
@@ -123,6 +130,15 @@ export interface KeyControl extends ControlBase {
 export interface BreakerControl extends ControlBase {
   kind: 'breaker';
   amps: number;
+  /**
+   * Found standing proud of the panel, left over from the last flight.
+   *
+   * "CIRCUIT BREAKERS — CHECK IN" is on the checklist because of this, and
+   * on an aeroplane where every breaker is always in it is a step that ticks
+   * itself and teaches nothing. One popped breaker makes it a scan with an
+   * answer at the end of it.
+   */
+  popped?: boolean;
 }
 
 /** A hand wheel such as elevator trim. Value is normalised 0..1. */
@@ -184,6 +200,18 @@ export interface ChecklistItem {
   callout: string;
   /** Control to highlight in 3D while this item is current. */
   highlight?: string;
+  /**
+   * For a step that is about a row of controls rather than one, the one that
+   * still needs attention right now — the breaker that is actually out of
+   * eighteen that look identical.
+   *
+   * Without this such a step has nothing to point at, so it gets no arrow
+   * and no "show me" button at all: the help is not withheld, it simply does
+   * not exist, which is far more confusing than help that is refused. Falls
+   * back to `highlight`, and returning null means there is nothing left to
+   * point at.
+   */
+  highlightNow?: (sim: Simulation) => string | null;
   /** True once the pilot has done the thing. */
   satisfied: (sim: Simulation) => boolean;
   /** Why the step exists. This is the actual teaching content. */

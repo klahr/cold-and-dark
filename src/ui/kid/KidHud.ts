@@ -7,6 +7,7 @@ import { windowChecklist, type VrCardContent } from '../VrChecklistCard';
 import type { VrSupport } from '../../input/VrSession';
 import { KID_FAULTS, KID_PRAISE, KID_UI, kidStep, sectionName, type KidStep } from './swedish';
 import { downloadChecklistSheet, stepNumbers } from './checklistSheet';
+import { el } from './dom';
 
 /** Seconds on one step before the UI offers to point at the control. */
 const STUCK_AFTER = 15;
@@ -19,16 +20,6 @@ const UNKNOWN: KidStep = {
   why: 'Varje steg gör planet lite mer redo att flyga.',
 };
 
-const el = <K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-};
 
 /**
  * The overlay: Swedish, for a child who can read.
@@ -362,6 +353,18 @@ export class KidHud {
   setSoundState(on: boolean): void {
     this.soundBtn.textContent = on ? '🔊' : '🔇';
     this.soundBtn.setAttribute('aria-pressed', String(on));
+  }
+
+  /**
+   * Puts the whole overlay out of reach while something sits in front of it.
+   *
+   * The welcome card covers the screen and takes the pointer, but on its own
+   * that leaves the Tab key walking straight into the buttons behind — and
+   * "Skriv ut listan" quietly producing a PDF from a screen nobody can see
+   * is a strange first thing to have happen.
+   */
+  setInert(inert: boolean): void {
+    this.root.toggleAttribute('inert', inert);
   }
 
   dispose(): void {

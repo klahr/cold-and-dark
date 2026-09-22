@@ -16,8 +16,8 @@ import * as THREE from 'three';
  *
  * Two states, blended rather than switched:
  *
- * - **At the control**, when it is comfortably in view: the arrow hovers
- *   just off the control on the pilot's side of it, nodding toward it.
+ * - **At the control**, when it is comfortably in view: the arrow stands a
+ *   little above the control and leans down at it, nodding.
  * - **Compass**, when it is not: the arrow parks in front of the pilot and
  *   tilts the way they need to turn. Turn that way and it flies to the
  *   control on its own, so the two states read as one object moving.
@@ -33,9 +33,31 @@ const HEAD_RADIUS = 0.018;
 const SHAFT_LENGTH = 0.045;
 const SHAFT_RADIUS = 0.006;
 
-/** How far the tip hovers off the control, and how far it nods. */
-const GAP = 0.04;
-const NOD = 0.014;
+/**
+ * Where the tip stands relative to the control, in metres: up the screen,
+ * and a little out toward the pilot.
+ *
+ * Up the screen, and not along the line of sight. The offset used to be
+ * purely toward the eye, which put the arrow squarely between the pilot and
+ * the control — and since it is drawn over everything else in the cabin, on
+ * purpose, it covered the one switch it exists to point out. Offsetting
+ * across the view instead is the fix.
+ *
+ * *Up* is the side it comes from because the placard naming a control is
+ * silkscreened underneath it, so an arrow below hides the word instead of
+ * the switch. Sideways would sit on the neighbouring switch in the row; the
+ * space above a control is the one reliably empty piece of panel around it.
+ *
+ * The small lift toward the pilot is not about covering anything — it keeps
+ * the arrow off the face of the panel, so that in a headset, where the depth
+ * is real, it reads as floating in front of the aeroplane rather than being
+ * painted on it.
+ */
+const SIDE_OFFSET = 0.055;
+const LIFT_OFFSET = 0.022;
+
+/** How much of that offset the nod breathes in and out, as a fraction. */
+const NOD = 0.22;
 
 /** Where the arrow parks when the control is out of view. */
 const COMPASS_DISTANCE = 0.5;
@@ -65,6 +87,8 @@ export class GuideArrow {
 
   private readonly eye = new THREE.Vector3();
   private readonly forward = new THREE.Vector3();
+  /** The camera's up axis in world space, for standing clear of the control. */
+  private readonly up = new THREE.Vector3();
   private readonly toTarget = new THREE.Vector3();
   private readonly desired = new THREE.Vector3();
   private readonly aim = new THREE.Object3D();
@@ -134,8 +158,6 @@ export class GuideArrow {
     const offAxis = this.forward.angleTo(this.toTarget);
     this.lost = this.lost ? offAxis > FOUND_ANGLE : offAxis > LOST_ANGLE;
 
-    const nod = GAP + NOD * (0.5 + 0.5 * Math.sin(this.elapsed * PULSE_RATE));
-
     if (this.lost) {
       // Park in front of the pilot, a little below eye line so it does not
       // sit on top of whatever they are trying to read.
@@ -145,9 +167,16 @@ export class GuideArrow {
         .add(this.eye);
       this.desired.y -= COMPASS_DROP;
     } else {
-      // Hover on the pilot's side of the control, so the control itself can
-      // never occlude the thing pointing at it.
-      this.desired.copy(this.toTarget).multiplyScalar(-nod).add(target);
+      // Stand above the control and lean down at it, leaving the control
+      // itself in the clear. The camera's own up axis rather than the
+      // world's, so a tilted head in a headset tilts the arrow with it and
+      // it stays above the control on screen instead of sliding round it.
+      this.up.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+      const breathe = 1 - NOD * (0.5 + 0.5 * Math.sin(this.elapsed * PULSE_RATE));
+      this.desired
+        .copy(target)
+        .addScaledVector(this.up, SIDE_OFFSET * breathe)
+        .addScaledVector(this.toTarget, -LIFT_OFFSET * breathe);
     }
 
     const first = this.presence < 0.01;

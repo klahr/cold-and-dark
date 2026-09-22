@@ -19,6 +19,7 @@ import { findAircraft, DEFAULT_AIRCRAFT_ID } from './aircraft/registry';
 import type { AircraftDefinition, ControlDef } from './aircraft/types';
 import { EYE } from './render/frame';
 import { KidHud } from './ui/kid/KidHud';
+import { Welcome } from './ui/kid/Welcome';
 import type { ControlDescription, HudCallbacks } from './ui/overlay';
 import { CockpitAudio } from './audio/CockpitAudio';
 import { describeControlInSwedish } from './ui/kid/swedish';
@@ -148,7 +149,24 @@ export class App {
     this.setQuality('balanced');
     this.loadAircraft(DEFAULT_AIRCRAFT_ID);
     this.bindEvents();
+    this.showWelcome();
     void this.initVr();
+  }
+
+  /**
+   * Opens with a card saying what this is.
+   *
+   * It belongs here rather than to the HUD because it introduces the trainer
+   * and not the aeroplane: it is shown once, at the start, and a second
+   * aircraft loaded later must not bring it back. Coming back on "Börja om"
+   * would be worse still — that button is pressed by somebody who already
+   * knows what they are doing and wants another go.
+   */
+  private showWelcome(): void {
+    const welcome = new Welcome(() => this.hud.setInert(false));
+    this.overlay.append(welcome.element);
+    this.hud.setInert(true);
+    welcome.focus();
   }
 
   /**

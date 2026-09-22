@@ -361,6 +361,34 @@ function pushPullInSwedish(id: string, v: number): string {
 }
 
 /* ------------------------------------------------------------------ */
+/* The welcome card                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The first words anyone reads here — and the whole premise is that they are
+ * read by a six-year-old with nobody sitting beside them. So it answers only
+ * the three questions someone has before they have touched anything: what is
+ * this, what do I do, and what happens if I do it. Then one button out.
+ *
+ * Two things it deliberately does not say. It does not promise flying: this
+ * aeroplane never leaves the ground, and a first sentence the trainer cannot
+ * keep is worse than no first sentence. And it does not explain the help
+ * button, because the card offers that itself once somebody is actually
+ * stuck — a list of things to do when it goes wrong is a strange way to open
+ * for a child who has not yet gone wrong.
+ */
+export const KID_WELCOME = {
+  title: 'Starta flygplanet!',
+  lead: 'Motorn är avstängd. Du ska få igång den.',
+  steps: [
+    { icon: '👀', text: 'Läs vad du ska göra.' },
+    { icon: '👆', text: 'Klicka på rätt sak i planet.' },
+    { icon: '🎉', text: 'Då startar motorn!' },
+  ],
+  button: 'Nu kör vi!',
+} as const;
+
+/* ------------------------------------------------------------------ */
 /* Everything else on screen                                           */
 /* ------------------------------------------------------------------ */
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AIRCRAFT } from '../src/aircraft/registry';
-import { KID_FAULTS, KID_STEPS, kidStep } from '../src/ui/kid/swedish';
+import { KID_FAULTS, KID_STEPS, KID_WELCOME, kidStep } from '../src/ui/kid/swedish';
 
 /**
  * The kid UI shows every item of the real checklist, so a step with no
@@ -53,6 +53,54 @@ describe('Swedish kid copy', () => {
       }
       expect(step.title.split(/\s+/).length, id).toBeLessThanOrEqual(6);
     }
+  });
+
+  /**
+   * The welcome card is read before anything else, by someone who has not
+   * yet been told a single thing — so it is held to a shorter line than the
+   * steps are. Six words is about a breath.
+   */
+  describe('the welcome card', () => {
+    const lines = [
+      KID_WELCOME.title,
+      KID_WELCOME.lead,
+      KID_WELCOME.button,
+      ...KID_WELCOME.steps.map((s) => s.text),
+    ];
+
+    it('says something on every line', () => {
+      for (const line of lines) expect(line.trim().length).toBeGreaterThan(0);
+      for (const step of KID_WELCOME.steps) expect(step.icon.length).toBeGreaterThan(0);
+    });
+
+    it('keeps every sentence to a breath', () => {
+      for (const line of lines) {
+        for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+          const words = sentence.trim().split(/\s+/).filter(Boolean).length;
+          expect(words, `"${sentence}"`).toBeLessThanOrEqual(6);
+        }
+      }
+    });
+
+    /**
+     * Three is what fits on a short screen without scrolling, and about as
+     * much as anyone reads before pressing the button anyway.
+     */
+    it('asks nobody to read more than three things', () => {
+      expect(KID_WELCOME.steps.length).toBeLessThanOrEqual(3);
+    });
+
+    /**
+     * The aeroplane never leaves the ground. Opening with a promise of
+     * flying is the one thing this screen must not do, since it is the only
+     * screen a child reads before deciding what they are here for.
+     */
+    it('does not promise a flight', () => {
+      const all = lines.join(' ').toLowerCase();
+      for (const word of ['flyga', 'flyger', 'lyfta', 'lyfter', 'flygtur']) {
+        expect(all, word).not.toContain(word);
+      }
+    });
   });
 
   it('explains every fault a child can cause', () => {

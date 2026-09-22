@@ -38,10 +38,14 @@ describe('GuideArrow', () => {
     arrow.dispose();
   });
 
-  it('hovers a short way off the control, on the pilot side of it', () => {
+  /** Where a world point lands on screen, in normalised device coordinates. */
+  function onScreen(camera: THREE.Camera, point: THREE.Vector3): THREE.Vector3 {
+    return point.clone().project(camera);
+  }
+
+  it('hovers a short way off the control', () => {
     const arrow = new GuideArrow();
     const camera = seatedCamera();
-    const eye = camera.getWorldPosition(new THREE.Vector3());
     const target = new THREE.Vector3(-0.2, 0.78, -0.62);
 
     arrow.update(0.016, camera, target);
@@ -50,8 +54,33 @@ describe('GuideArrow', () => {
     // Close enough to read as attached to the control, never touching it.
     expect(gap).toBeGreaterThan(0.03);
     expect(gap).toBeLessThan(0.07);
-    // Between the pilot and the control, so the control cannot occlude it.
-    expect(arrow.object.position.distanceTo(eye)).toBeLessThan(eye.distanceTo(target));
+    arrow.dispose();
+  });
+
+  /**
+   * The whole point, and the thing that was wrong: the arrow is drawn over
+   * every other object in the cabin on purpose, so anywhere it overlaps the
+   * control on screen, it hides it. It used to be offset along the line of
+   * sight — straight at the pilot's eye from the control — which projects to
+   * the same pixel and covered the switch it was pointing out.
+   */
+  it('stands clear of the control on screen rather than on top of it', () => {
+    const arrow = new GuideArrow();
+    const camera = seatedCamera();
+    const target = new THREE.Vector3(-0.2, 0.78, -0.62);
+
+    // Over a full nod, so the closest point of the breathing cycle counts too.
+    for (let i = 0; i < 90; i++) {
+      arrow.update(1 / 60, camera, target);
+
+      const tip = onScreen(camera, arrow.object.position);
+      const control = onScreen(camera, target);
+      // Clear of it, and clear of it *upward*: the placard naming the
+      // control is printed underneath, so below is the one side that trades
+      // hiding the switch for hiding its name.
+      expect(tip.y).toBeGreaterThan(control.y);
+      expect(Math.hypot(tip.x - control.x, tip.y - control.y)).toBeGreaterThan(0.04);
+    }
     arrow.dispose();
   });
 

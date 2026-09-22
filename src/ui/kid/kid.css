@@ -9,7 +9,12 @@
  * switches.
  */
 
-.kid {
+/* The palette and the typeface, shared by everything the overlay draws: the
+   running UI inside `.kid`, and the welcome card, which is its sibling
+   rather than its child so that putting the overlay out of reach does not
+   also put the welcome out of reach. */
+.kid,
+.kid-welcome {
   --kid-ink: #16243a;
   --kid-paper: #fffdf7;
   --kid-sky: #2f8fe0;
@@ -19,13 +24,16 @@
   --kid-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   --kid-round: 22px;
 
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
   /* Rounded where the system has one; nothing is downloaded, in keeping
      with the rest of the project generating its assets at runtime. */
   font-family: ui-rounded, 'SF Pro Rounded', 'Segoe UI Variable Display', 'Segoe UI',
     system-ui, sans-serif;
+}
+
+.kid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 /* `#overlay > *` in the main stylesheet turns pointer events back on for
@@ -54,7 +62,8 @@
  * own size below was being thrown away. Sizes are set per button, and this
  * rule must not have an opinion about them.
  */
-.kid button {
+.kid button,
+.kid-welcome button {
   font-family: inherit;
   font-weight: 800;
   cursor: pointer;
@@ -462,6 +471,126 @@
   display: none;
 }
 
+/* ------------------------------------------------------------- welcome */
+
+/* The card that opens the trainer. It does cover the cockpit and it does
+   catch clicks — that is the point, there is nothing else to do yet — and it
+   is the one screen here allowed to. */
+.kid-welcome {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  /* Dark enough to put the cockpit behind glass and leave it recognisable:
+     a child should be able to see what they are about to be let into. */
+  background: rgba(10, 16, 26, 0.58);
+  backdrop-filter: blur(3px);
+  transition: opacity 0.3s ease;
+}
+
+.kid-welcome.leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kid-welcome-card {
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 26px 28px 28px;
+  background: var(--kid-paper);
+  color: var(--kid-ink);
+  border-radius: var(--kid-round);
+  box-shadow: var(--kid-shadow);
+  text-align: center;
+  animation: kid-pop 0.4s cubic-bezier(0.22, 1.4, 0.4, 1);
+}
+
+.kid-welcome-plane {
+  display: block;
+  font-size: 56px;
+  line-height: 1;
+}
+
+.kid-welcome-title {
+  margin: 8px 0 0;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.kid-welcome-lead {
+  margin: 8px 0 0;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--kid-soft);
+}
+
+/* Left-aligned inside a centred card: three lines of instructions are read
+   one after another, and centred text gives the eye no edge to come back to. */
+.kid-welcome-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 22px 0 0;
+  padding: 0;
+  text-align: left;
+  list-style: none;
+}
+
+.kid-welcome-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.kid-welcome-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  font-size: 25px;
+  background: #fdf1d4;
+  border-radius: 14px;
+}
+
+.kid-welcome-go {
+  display: block;
+  width: 100%;
+  min-height: 58px;
+  margin-top: 24px;
+  padding: 0 22px;
+  font-size: 21px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--kid-grass);
+  border-radius: 16px;
+  box-shadow: 0 4px 0 #22855a;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+/* The button takes the keyboard as soon as the card opens, so this ring is
+   drawn before anybody has asked for it. Made to look deliberate rather than
+   like the browser's default: on this screen it is the only thing to press,
+   and a ring around it says so. */
+.kid-welcome-go:focus-visible {
+  outline: 4px solid var(--kid-sun);
+  outline-offset: 3px;
+}
+
+.kid-welcome-go:hover {
+  filter: brightness(1.05);
+}
+
+.kid-welcome-go:active {
+  transform: translateY(3px);
+  box-shadow: none;
+}
+
 /* Confetti, and nothing else. This used to be a modal over the cockpit
    asking whether they would like to turn the aeroplane off now; it covers
    nothing and catches no clicks, so the cockpit stays where it was. */
@@ -699,11 +828,56 @@
   }
 }
 
+/* The welcome card carries the most words of anything here, so on a short
+   screen it is the first thing to run out of room. Everything comes down a
+   step; the aeroplane at the top goes, since the one behind the card is a
+   better picture of what this is than an emoji. */
+@media (max-height: 620px) {
+  .kid-welcome-card {
+    padding: 18px 22px 20px;
+  }
+
+  .kid-welcome-plane {
+    display: none;
+  }
+
+  .kid-welcome-title {
+    font-size: 26px;
+  }
+
+  .kid-welcome-lead {
+    font-size: 17px;
+  }
+
+  .kid-welcome-steps {
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .kid-welcome-step {
+    font-size: 16px;
+  }
+
+  .kid-welcome-icon {
+    width: 38px;
+    height: 38px;
+    font-size: 21px;
+    border-radius: 11px;
+  }
+
+  .kid-welcome-go {
+    min-height: 48px;
+    margin-top: 16px;
+    font-size: 18px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kid-card.fresh,
   .kid-toast,
   .kid-show.nudge,
-  .kid-finish span {
+  .kid-finish span,
+  .kid-welcome-card {
     animation: none;
   }
 }

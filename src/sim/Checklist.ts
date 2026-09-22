@@ -145,14 +145,21 @@ export class ChecklistRunner {
    */
   lockReason(controlId: string): 'done' | 'not-yet' | null {
     if (!this.isLocked(controlId)) return null;
+    // A control the pilot has already set is held *because* it is set, even
+    // though a later step names it again — the shutdown asks for the mixture,
+    // the master and the key a second time, and every one of them was
+    // therefore reported as "not yet" for the whole flight. That is the
+    // opposite of the truth and the opposite of what the child needs to hear:
+    // those are done, they are right, and they must stay where they are.
+    // So it is the finished mention that decides, not the pending one.
     for (const section of this.sections) {
       for (const item of section.items) {
-        if (!this.done.has(item.id) && itemControls(item).includes(controlId)) {
-          return 'not-yet';
+        if (this.done.has(item.id) && itemControls(item).includes(controlId)) {
+          return 'done';
         }
       }
     }
-    return 'done';
+    return 'not-yet';
   }
 
   /** Controls an active fault's recovery needs, whatever the list thinks. */

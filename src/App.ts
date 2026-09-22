@@ -495,8 +495,15 @@ export class App {
    * Toggles a free orbit camera. This exists purely so cabin geometry can be
    * checked from outside while it is being built; the trainer itself never
    * leaves the pilot's seat.
+   *
+   * Development builds only. Shift+O is easy enough to hit by accident, and
+   * what it does to a six-year-old is teleport them out of the aeroplane
+   * into a camera none of the on-screen buttons mention — with the way back
+   * on a key nothing tells them about. There is nothing here for anyone who
+   * is not building the cabin.
    */
   toggleInspect(on = !this.inspecting): void {
+    if (!INSPECT_ENABLED) return;
     this.inspecting = on;
     if (!on) {
       if (this.inspectControls) this.inspectControls.enabled = false;
@@ -582,6 +589,13 @@ export class App {
  * sharpness, drop it toward 0.7 for frames.
  */
 const VR_FRAMEBUFFER_SCALE = 0.85;
+
+/**
+ * Whether the free orbit camera exists at all. It is a tool for building the
+ * cabin, not part of the trainer, so it ships with the source and not with
+ * the aeroplane. See `toggleInspect`.
+ */
+const INSPECT_ENABLED = import.meta.env.DEV;
 
 /** How far off the centre of a viewpoint a world point falls, in radians. */
 function offAxisAngle(preset: ViewPreset, point: THREE.Vector3): number {

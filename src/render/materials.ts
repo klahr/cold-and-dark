@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markPooled } from './geometry';
 import {
   asphaltSurface,
   brushedMetal,
@@ -40,6 +41,7 @@ function std(
     mat.normalScale = new THREE.Vector2(normalScale, normalScale);
   }
   mat.name = key;
+  markPooled(mat);
   cache.set(key, mat);
   return mat;
 }
@@ -144,6 +146,7 @@ export function hitProxyMaterial(): THREE.MeshBasicMaterial {
     hitMaterial.name = 'hitProxy';
     hitMaterial.colorWrite = false;
     hitMaterial.depthWrite = false;
+    markPooled(hitMaterial);
   }
   return hitMaterial;
 }

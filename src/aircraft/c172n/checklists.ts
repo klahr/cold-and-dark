@@ -182,7 +182,14 @@ export const C172N_CHECKLISTS: readonly ChecklistSection[] = [
         id: 'warm-idle',
         callout: 'THROTTLE — 1000 RPM',
         highlight: 'throttle',
-        satisfied: (s) => s.engine.isRunning && s.engine.rpm > 900 && s.engine.rpm < 1250,
+        // The floor sits clear of the alternator's own cut-in at 900 RPM
+        // rather than exactly on it. RPM lags the throttle by about half a
+        // second while the dwell is 0.9s, so a step that completed at 901
+        // could leave the knob at a setting that settles in the 880s — below
+        // the alternator, with the throttle locked behind the completed step
+        // and the ammeter check ahead asking for a charge that can never
+        // come. `ammeter-check` keeps the throttle live for the same reason.
+        satisfied: (s) => s.engine.isRunning && s.engine.rpm > 950 && s.engine.rpm < 1250,
         why: 'A warm-up RPM that keeps oil circulating and the alternator producing, without shock-cooling or racing a cold engine.',
         hint: 'Adjust the throttle until the tachometer reads about 1000.',
       },
@@ -197,6 +204,14 @@ export const C172N_CHECKLISTS: readonly ChecklistSection[] = [
       {
         id: 'ammeter-check',
         callout: 'AMMETER — CHECK CHARGING',
+        // No arrow — there is nothing to press — but the throttle stays in
+        // the pilot's hands, because it is the only thing that can put this
+        // step right. The alternator needs 900 RPM, and an engine idling
+        // below that will never show a charge however long you look at it.
+        // Held, as everything off the live step is, this was a dead end with
+        // the shutdown still locked behind it: the whole start done
+        // correctly, and nothing left to press but "start again".
+        controls: ['throttle'],
         satisfied: (s) => s.engine.isRunning && s.electrical.alternatorOnline,
         why: 'The needle should sit slightly on the charge side, replacing what the starter just took out of the battery. A discharge here means the alternator is not carrying the load and the flight is over before it starts.',
         hint: 'Confirm the ammeter is showing a charge and the low-voltage light is out.',

@@ -324,6 +324,34 @@ export class KidHud {
     this.tooltipEl.style.left = `${x}px`;
     this.tooltipEl.style.top = `${y}px`;
     this.tooltipEl.classList.add('visible');
+    this.keepTooltipOnScreen(x, y);
+  }
+
+  /**
+   * Nudges the read-out back inside the window.
+   *
+   * The pointer sits on the control and the control can be anywhere, so near
+   * an edge the label was simply cut off by the viewport — exactly when a
+   * child is most likely to be hunting for it.
+   *
+   * It is measured at the origin rather than where it is about to land,
+   * because a box hanging over the edge is squeezed narrow and tall by the
+   * viewport: correcting by *that* width moves it somewhere it then re-wraps
+   * to a different shape, and it is still off the screen. At the origin it
+   * has room on every side and reports the size it will actually be. The
+   * offset from the anchor comes out of the same measurement, so the
+   * stylesheet stays free to change it.
+   */
+  private keepTooltipOnScreen(x: number, y: number): void {
+    const pad = 8;
+    const style = this.tooltipEl.style;
+    style.left = '0px';
+    style.top = '0px';
+    const box = this.tooltipEl.getBoundingClientRect();
+    const spanX = window.innerWidth - pad - box.width - box.left;
+    const spanY = window.innerHeight - pad - box.height - box.top;
+    style.left = `${Math.max(pad - box.left, Math.min(x, spanX))}px`;
+    style.top = `${Math.max(pad - box.top, Math.min(y, spanY))}px`;
   }
 
   refreshTooltip(description: ControlDescription): void {

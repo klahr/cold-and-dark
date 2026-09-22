@@ -553,16 +553,11 @@
   font-size: 30px;
 }
 
+/* On any small screen the type and the furniture come down a size. Where the
+   card itself goes does not follow from "small", though — it follows from
+   which way the screen is small, and the two answers are opposites. See the
+   two blocks under this one. */
 @media (max-width: 860px), (max-height: 620px) {
-  .kid-card {
-    right: 12px;
-    left: 12px;
-    top: auto;
-    bottom: 12px;
-    width: auto;
-    padding: 16px 18px 18px;
-  }
-
   .kid-what {
     font-size: 22px;
   }
@@ -577,13 +572,111 @@
     font-size: 38px;
   }
 
+  .kid-track {
+    width: min(300px, calc(100vw - 110px));
+  }
+
+  /* Four discs and a title do not fit across a narrow bar, and wrapped they
+     dropped the last button straight onto the progress track. Everything in
+     the bar gets smaller instead, and the subtitle — which nobody is reading
+     on a phone — goes. */
+  .kid-tools {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .kid-tool {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 8px;
+    font-size: 23px;
+  }
+
+  .kid-brand {
+    min-width: 0;
+    padding: 7px 12px 7px 10px;
+  }
+
+  .kid-brand strong {
+    font-size: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .kid-brand span {
+    display: none;
+  }
+}
+
+/* Narrow but tall — a phone held upright. There is no room for a column
+   beside the cockpit, so the card becomes a sheet across the bottom. */
+@media (max-width: 860px) and (min-height: 621px) {
+  .kid-card {
+    right: 12px;
+    left: 12px;
+    top: auto;
+    bottom: 12px;
+    width: auto;
+    padding: 16px 18px 18px;
+  }
+
   .kid-toasts {
     bottom: auto;
     top: 112px;
   }
+}
 
-  .kid-track {
-    width: min(300px, calc(100vw - 110px));
+/* Short — a phone on its side, a tablet in landscape, a desktop window
+   dragged shallow. The bottom sheet above used to apply here as well, and
+   that was the wrong way round: on a 390px-tall screen a full-width sheet
+   covered two thirds of the aeroplane, and the control the step was asking
+   for came to rest *underneath* it, where it cannot be clicked at all. A
+   short screen is a wide one, so the card stays a column beside the cockpit
+   and gives the height back. */
+@media (max-height: 620px) {
+  .kid-card {
+    top: 76px;
+    bottom: 12px;
+    right: 12px;
+    left: auto;
+    width: min(340px, 40vw);
+    padding: 14px 16px 16px;
+    /* Last resort. Everything below is aimed at an ordinary step fitting
+       without it, because a child does not know to scroll a card — but a
+       long step on a short screen has to go somewhere. */
+    overflow-y: auto;
+  }
+
+  /* Side by side rather than stacked. In a column this narrow the two
+     buttons wrapped onto separate rows, which on its own was most of the
+     height the card did not have. */
+  .kid-acts {
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .kid-show,
+  .kid-why-btn {
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  .kid-icon {
+    width: 56px;
+    height: 56px;
+    font-size: 32px;
+  }
+
+  .kid-chip {
+    margin-bottom: 8px;
+  }
+
+  .kid-action {
+    margin-top: 10px;
   }
 }
 

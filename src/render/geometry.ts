@@ -90,12 +90,55 @@ export function tube(
   return mesh;
 }
 
-/** Disposes every geometry under a subtree. Materials are pooled elsewhere. */
+/**
+ * Marks a material or texture as belonging to a shared pool rather than to
+ * the mesh holding it, so tearing a subtree down leaves it alone.
+ *
+ * Without a way to tell the two apart, `disposeTree` had the choice between
+ * leaking every per-mesh material and its canvas texture — which is what it
+ * did, a couple of hundred textures over twenty aircraft loads — and
+ * disposing the shared palette out from under the rest of the cabin, which
+ * is worse. The pool is small and known: the `MAT` palette, the pick proxy
+ * and the procedural surfaces. Everything else — every placard label, every
+ * dial face, every highlight halo — belongs to exactly one mesh and should
+ * die with it.
+ */
+export function markPooled<T extends { userData: Record<string, unknown> }>(thing: T): T {
+  thing.userData['pooled'] = true;
+  return thing;
+}
+
+/** Whether `markPooled` claimed this, and so whether disposing it is wrong. */
+export function isPooled(thing: { userData: Record<string, unknown> }): boolean {
+  return thing.userData['pooled'] === true;
+}
+
+/**
+ * Disposes everything a subtree owns outright: geometries always, and the
+ * materials and textures that are not shared with the rest of the scene.
+ */
 export function disposeTree(root: THREE.Object3D): void {
   root.traverse((obj) => {
     const mesh = obj as Partial<THREE.Mesh>;
     mesh.geometry?.dispose();
+    const material = mesh.material;
+    if (!material) return;
+    if (Array.isArray(material)) for (const m of material) disposeMaterial(m);
+    else disposeMaterial(material);
   });
+}
+
+/** Frees a material and the maps hanging off it, unless they are pooled. */
+function disposeMaterial(material: THREE.Material): void {
+  if (isPooled(material)) return;
+  // The maps are plain fields on the material — `map`, `normalMap`,
+  // `alphaMap` and the rest — so this catches whichever ones it happens to
+  // carry without naming them, and a per-mesh canvas texture is exactly the
+  // thing that was being left behind.
+  for (const value of Object.values(material)) {
+    if (value instanceof THREE.Texture && !isPooled(value)) value.dispose();
+  }
+  material.dispose();
 }
 
 /**
@@ -120,6 +163,11 @@ export function mergeStatic(
 
   const merged = mergeGeometries(geometries, false);
   for (const geometry of geometries) geometry.dispose();
+  // The inputs are consumed, not borrowed: every caller builds a throwaway
+  // pile of meshes purely to be baked, and none of them ever reaches the
+  // scene graph. That put the originals out of `disposeTree`'s reach, so
+  // their geometry was the one thing a rebuilt rig never gave back.
+  for (const mesh of meshes) mesh.geometry.dispose();
   if (!merged) return null;
 
   const mesh = new THREE.Mesh(merged, material);

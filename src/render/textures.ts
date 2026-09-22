@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markPooled } from './geometry';
 
 /**
  * Procedural surface textures.
@@ -209,6 +210,10 @@ function surface(key: string, build: () => SurfaceMaps): SurfaceMaps {
   let hit = cache.get(key);
   if (!hit) {
     hit = build();
+    // Shared by every material that asks for this surface, so it outlives
+    // any one of them and is freed here — by `disposeTextures` — rather than
+    // by whichever mesh happens to be torn down first.
+    for (const map of Object.values(hit)) markPooled(map);
     cache.set(key, hit);
   }
   return hit;

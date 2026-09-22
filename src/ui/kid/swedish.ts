@@ -294,6 +294,22 @@ export const KID_CONTROL_NAMES: Record<string, string> = {
   cabinAir: 'Friska luften',
 };
 
+/**
+ * Toggles whose two positions are not "on" and "off", as `[off, on]`.
+ *
+ * A door is shut or open, a belt is done up or undone, a seat lock is locked
+ * or not; none of the three is *switched*. They are toggles only as far as
+ * the simulation is concerned, and "Dörren: AV" is the kind of thing that
+ * reads as correct to whoever wrote the switch code and as nonsense to the
+ * six-year-old the screen is for. These three are also the first three steps
+ * on the list, so they are the first Swedish anyone reads here.
+ */
+const TOGGLE_WORDS: Record<string, readonly [string, string]> = {
+  seatLatch: ['olåst', 'låst'],
+  seatbelt: ['löst', 'fastspänt'],
+  cabinDoor: ['öppen', 'stängd'],
+};
+
 /** Hover read-out in kid mode, or null for anything without a Swedish name. */
 export function describeControlInSwedish(
   def: ControlDef,
@@ -304,8 +320,10 @@ export function describeControlInSwedish(
 
   const v = sim.controls.num(def.id);
   switch (def.kind) {
-    case 'toggle':
-      return { title: name, value: v > 0.5 ? 'PÅ' : 'AV' };
+    case 'toggle': {
+      const words = TOGGLE_WORDS[def.id] ?? ['AV', 'PÅ'];
+      return { title: name, value: v > 0.5 ? words[1] : words[0] };
+    }
     case 'breaker':
       return { title: name, value: v > 0.5 ? 'intryckt' : 'sticker ut' };
     case 'selector':

@@ -134,10 +134,93 @@ describe('the guard rail', () => {
 
     advanceTo(sim, checklist, 'beacon-on');
     expect(checklist.isLocked('mixture')).toBe(true);
-    expect(checklist.lockReason('mixture')).toBe('not-yet');
 
     advanceTo(sim, checklist, 'shutdown-mixture');
     expect(checklist.isLocked('mixture')).toBe(false);
+  });
+
+  /**
+   * The mixture, both halves of the master and the key are all named twice:
+   * once to start the aeroplane and once to stop it. Deciding the message
+   * from the first *unfinished* mention meant the shutdown's copy always won,
+   * so every one of them said "not yet — first do <whatever is on screen>"
+   * for the entire flight. They are set, they are right, and what the child
+   * needs to hear about the big red knob they have just pushed in is that it
+   * stays there.
+   */
+  it('calls a control done once it has been set, even though the shutdown names it again', () => {
+    const { sim, checklist } = fresh();
+    advanceTo(sim, checklist, 'beacon-on');
+
+    for (const id of ['mixture', 'masterBattery', 'masterAlternator']) {
+      expect(checklist.isLocked(id), id).toBe(true);
+      expect(checklist.lockReason(id), id).toBe('done');
+    }
+
+    // And a control genuinely still ahead is still reported as such.
+    expect(checklist.lockReason('magKey')).toBe('not-yet');
+  });
+
+  /**
+   * The step that had no way out.
+   *
+   * The warm-up item and the alternator both turn on 900 RPM: one to tick
+   * off, the other to come online. RPM lags the throttle by about half a
+   * second and the dwell is 0.9, so a warm-up that completed on a needle
+   * still falling could freeze the knob at a setting that settles in the
+   * 880s. The ammeter check is next, and it asks for a charge that engine
+   * cannot produce — with the throttle locked behind the finished step, the
+   * shutdown locked behind the unfinished one, and nothing on screen to
+   * press but "start again", at the end of an otherwise perfect start.
+   *
+   * Two things keep it open: the warm-up floor now clears the alternator's
+   * cut-in rather than sitting on it, and the ammeter check keeps the one
+   * control that can put it right.
+   */
+  it('can be recovered from an idle too low to charge', () => {
+    const { sim, checklist } = fresh();
+    advanceTo(sim, checklist, 'ammeter-check');
+
+    const tick = (seconds: number): void => {
+      for (let t = 0; t < Math.round(seconds / STEP); t++) {
+        sim.tick(STEP);
+        checklist.update(STEP);
+      }
+    };
+
+    // Let the engine fall under the alternator: the state a warm-up that
+    // ticked off on a decaying needle leaves behind.
+    sim.controls.set('throttle', 0.05);
+    tick(6);
+    expect(sim.electrical.alternatorOnline).toBe(false);
+    expect(checklist.position?.item.id).toBe('ammeter-check');
+
+    // The pilot opens the throttle again — and is allowed to.
+    expect(checklist.isLocked('throttle')).toBe(false);
+    sim.controls.set('throttle', 0.2);
+    tick(8);
+
+    expect(sim.electrical.alternatorOnline).toBe(true);
+    expect(checklist.isDone('ammeter-check')).toBe(true);
+  });
+
+  /**
+   * The margin the fix above rests on: finishing the warm-up must leave the
+   * alternator online, not balanced on its threshold.
+   */
+  it('does not finish the warm-up at an RPM the alternator cannot hold', () => {
+    const { sim, checklist } = fresh();
+    advanceTo(sim, checklist, 'warm-idle');
+    const item = checklist.position?.item;
+    expect(item?.id).toBe('warm-idle');
+
+    // Anything the step accepts has to be comfortably above the 900 RPM the
+    // alternator needs, since the throttle is held where it stood the moment
+    // the step completed.
+    for (const rpm of [880, 900, 920]) {
+      sim.engine.rpm = rpm;
+      expect(item?.satisfied(sim), `${rpm} rpm`).toBe(false);
+    }
   });
 
   /**

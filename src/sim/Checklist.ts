@@ -26,10 +26,17 @@ export class ChecklistRunner {
   private readonly done = new Set<string>();
   private readonly listeners = new Set<(item: ChecklistItem) => void>();
 
+  /** Every control any item names; the rest of the cockpit stays free. */
+  private readonly managed: ReadonlySet<string>;
+
   constructor(
     private readonly sections: readonly ChecklistSection[],
     private readonly sim: Simulation,
-  ) {}
+  ) {
+    this.managed = new Set(
+      sections.flatMap((section) => section.items.flatMap((item) => itemControls(item))),
+    );
+  }
 
   get position(): ChecklistPosition | null {
     const section = this.sections[this.sectionIndex];
@@ -64,23 +71,63 @@ export class ChecklistRunner {
     return this.done.has(itemId);
   }
 
+  /* ------------------------------------------------------------------ */
+  /* The guard rail                                                      */
+  /* ------------------------------------------------------------------ */
+
   /**
-   * The first outstanding item that wants a given control, if it is not the
-   * one currently being asked for.
+   * Whether the pilot is allowed to move a control at all right now.
    *
-   * The list is walked strictly in order, so operating the right switch at
-   * the wrong time looks exactly like the aeroplane ignoring you. This lets
-   * the UI say what is actually going on.
+   * Exactly one step is live at a time, and only that step's controls
+   * answer. Everything else the checklist knows about is held where it
+   * stands — which covers both halves of the same rule:
+   *
+   *  - a step already done cannot be undone, so the electrics stay on once
+   *    they are on and the child cannot quietly unmake their own progress
+   *    while hunting for the next switch;
+   *  - a step not yet reached cannot be done early, so a switch thrown out
+   *    of order does not stay thrown.
+   *
+   * Controls the checklist never mentions — the landing light, the flaps,
+   * the trim wheel — are not managed and stay free the whole time. Poking
+   * at the aeroplane is not a mistake, and locking the cockpit down to the
+   * one live switch would make it a slideshow.
+   *
+   * This is a query rather than a stored flag, so nothing has to remember to
+   * refresh it and the simulation stays as testable as the rest.
    */
-  pendingItemFor(controlId: string): ChecklistItem | null {
-    const current = this.position?.item;
-    if (current?.highlight === controlId) return null;
+  isLocked(controlId: string): boolean {
+    if (!this.managed.has(controlId)) return false;
+    const item = this.position?.item;
+    if (item && itemControls(item).includes(controlId)) return false;
+    // A mistake that needs a locked control to put right would otherwise be
+    // a dead end with nothing but "start again" behind it.
+    return !this.recoveryControls().has(controlId);
+  }
+
+  /**
+   * Why a control will not move, so the overlay can say the right thing:
+   * `not-yet` for a step still ahead, `done` for one already behind.
+   */
+  lockReason(controlId: string): 'done' | 'not-yet' | null {
+    if (!this.isLocked(controlId)) return null;
     for (const section of this.sections) {
       for (const item of section.items) {
-        if (item.highlight === controlId && !this.done.has(item.id)) return item;
+        if (!this.done.has(item.id) && itemControls(item).includes(controlId)) {
+          return 'not-yet';
+        }
       }
     }
-    return null;
+    return 'done';
+  }
+
+  /** Controls an active fault's recovery needs, whatever the list thinks. */
+  private recoveryControls(): Set<string> {
+    const out = new Set<string>();
+    for (const fault of this.sim.faults.active()) {
+      for (const id of fault.recovery ?? []) out.add(id);
+    }
+    return out;
   }
 
   /** Progress through the whole list, 0..1. */
@@ -143,4 +190,12 @@ export class ChecklistRunner {
       this.itemIndex = 0;
     }
   }
+}
+
+/**
+ * The controls a step may touch: what it declares, or the one it points at.
+ */
+function itemControls(item: ChecklistItem): readonly string[] {
+  if (item.controls) return item.controls;
+  return item.highlight ? [item.highlight] : [];
 }

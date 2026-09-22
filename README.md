@@ -116,6 +116,31 @@ normally, runs normally and never charges, so a pilot who waved the scan
 through meets the consequence two minutes later at "AMMETER — CHECK
 CHARGING", with the low-voltage light on.
 
+**One step's controls answer at a time.** While a step is current, the
+controls it names are live and every other control the checklist knows about
+is held where it stands. A step already done cannot be undone, so the
+electrics stay on once they are on and a child cannot quietly unmake their
+own progress while hunting for the next switch; a step not yet reached
+cannot be done early, so a switch thrown out of order does not stay thrown.
+Both cases are answered in words rather than with a dead switch — *Den är
+klar!* for one already behind, *Inte den än!* for one still ahead.
+
+Controls the list never mentions — the landing light, the flaps, the trim
+wheel — are never held, because poking at the aeroplane between steps is not
+a mistake and a cockpit reduced to one live switch is a slideshow.
+
+The lock is a query over the list's position rather than a stored flag, so
+nothing has to remember to refresh it, and it lives in `sim/Checklist.ts`
+where both the mouse and the VR controllers ask the same question. Two
+things are deliberately exempt. A sprung detent coming home is the control's
+own physics, not the pilot: the start step completes while the key is still
+held at START, and a lock that caught the release too would leave the
+starter grinding against a running engine with no way to let go. And **an
+active fault hands back whatever puts it right** — clearing a flooded engine
+is a POH procedure over the mixture and the throttle, both of them locked by
+the time a child can flood it, so without that the likeliest mistake in the
+aeroplane would be a dead end with nothing behind it but "start again".
+
 ## The overlay
 
 There is one overlay and it is the Swedish one. What it does:
@@ -164,7 +189,14 @@ made when they meant something still lands on the trainer.
 - **Fuel** — two tanks, selector valve, carburettor float bowl, primer
   strokes. The engine model also carries the fuel-injected case — priming on
   the boost pump rather than the primer — which no aircraft in the registry
-  uses today.
+  uses today. **The prime does not evaporate.** A real manifold loses it over
+  about half a minute, and modelling that made the aeroplane unstartable for
+  the child it is built for: three strokes bought nineteen seconds, and
+  cracking the throttle and looking out of both windows for the propeller
+  check take a six-year-old far longer than that. The overlay's own patience
+  threshold allows fifteen seconds for a *single* step. It was the one
+  failure in here that the pilot had not caused, and by the time it bit, the
+  thing that caused it had scrolled off the screen.
 - **Ignition** — magnetos live regardless of the master, spring-loaded START
   detent, starter duty cycle with thermal lockout.
 - **Engine** — state machine over `off → cranking → catching → running →
@@ -431,6 +463,17 @@ in.
 - a copy test that every checklist item has Swedish child wording, that none
   of it has drifted back towards POH phrasing, and that no copy is left
   behind for a step that no longer exists;
+- a lock test that every step's own controls are live while that step is
+  current — the failure that matters is not a switch that moves when it
+  should not, but one that will not move when it should, which presents as
+  the aeroplane being broken and has no message attached to it — plus that a
+  done step is held, an unreached step is held, the split master and the
+  whole breaker row open together, shutdown hands the mixture back, and a
+  flooded engine gets the mixture and throttle returned to it;
+- a primer test that three strokes still start the engine five minutes
+  later, and that waiting is not a way to un-flood it. The rest of the suite
+  cranks a fraction of a second after priming, so nothing else would notice
+  the decay coming back;
 - a guide-arrow test that the arrow aims at the control, hovers on the
   pilot's side of it, parks in front when the control is out of view and
   flies back to it when the pilot turns;

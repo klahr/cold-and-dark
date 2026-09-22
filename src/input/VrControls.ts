@@ -36,6 +36,10 @@ interface HandState {
 
 export interface VrControlsCallbacks {
   onActuate(id: string, value: number): void;
+  /** Whether the checklist is letting this control move; see `Pointer`. */
+  canOperate(id: string): boolean;
+  /** Fired when a trigger pull lands on a control the checklist is holding. */
+  onBlocked(id: string): void;
   /**
    * What to strap the wrist board to for the left hand: a controller's grip
    * space, or a tracked hand's wrist joint — or null when there is no left
@@ -340,6 +344,11 @@ export class VrControls {
     const control = hit.control;
     if (!control) return;
 
+    if (!this.callbacks.canOperate(control.def.id)) {
+      this.callbacks.onBlocked(control.def.id);
+      return;
+    }
+
     hand.active = control;
     hand.dragged = false;
     hand.startValue = this.controls.num(control.def.id);
@@ -378,11 +387,14 @@ export class VrControls {
     const control = hand.active;
     hand.active = null;
     if (!control) return;
+    // Forced past the lock, for the same reason as the mouse: a spring
+    // coming home is the control, not the pilot.
     const sprung = control.release(this.controls.num(control.def.id));
-    if (sprung !== null) this.commit(control, sprung);
+    if (sprung !== null) this.commit(control, sprung, true);
   }
 
-  private commit(control: ControlObject, value: number): void {
+  private commit(control: ControlObject, value: number, force = false): void {
+    if (!force && !this.callbacks.canOperate(control.def.id)) return;
     const before = this.controls.num(control.def.id);
     this.controls.set(control.def.id, value);
     const after = this.controls.num(control.def.id);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ChecklistRunner } from '../src/sim/Checklist';
 import { Simulation } from '../src/sim/Simulation';
 import { C172N } from '../src/aircraft/c172n';
-import { detent, setBreakers, STEP } from './helpers';
+import { CHECKLIST_ACTIONS, OBSERVATIONS, STEP } from './helpers';
 
 /**
  * The whole procedure, flown one item at a time.
@@ -19,65 +19,6 @@ import { detent, setBreakers, STEP } from './helpers';
  * why.
  */
 
-/** What a pilot does when the list asks for each item. */
-const ACTIONS: Record<string, (sim: Simulation) => void> = {
-  seats: (s) => s.controls.set('seatLatch', 1),
-  belts: (s) => s.controls.set('seatbelt', 1),
-  doors: (s) => s.controls.set('cabinDoor', 1),
-  'brakes-set': (s) => s.controls.set('parkingBrake', 0),
-  'fuel-both': (s) => s.controls.set('fuelSelector', detent(s, 'fuelSelector', 'BOTH')),
-  'avionics-off': (s) => s.controls.set('avionicsMaster', 0),
-  'breakers-in': (s) => setBreakers(s, true),
-
-  'mixture-rich': (s) => s.controls.set('mixture', 1),
-  'carb-heat-cold': (s) => s.controls.set('carbHeat', 1),
-  'master-on': (s) => {
-    s.controls.set('masterBattery', 1);
-    s.controls.set('masterAlternator', 1);
-  },
-  'beacon-on': (s) => s.controls.set('beacon', 1),
-  prime: (s) => {
-    // Three full strokes: out, in, three times over.
-    for (let i = 0; i < 3; i++) {
-      s.controls.set('primer', 0);
-      for (let t = 0; t < 12; t++) s.tick(STEP);
-      s.controls.set('primer', 1);
-      for (let t = 0; t < 12; t++) s.tick(STEP);
-    }
-  },
-  // A quarter of an inch, at the small end of what the item accepts. Set it
-  // near the top of that range and the engine settles inside the warm-up
-  // window on its own, which would turn the next item into a formality.
-  'throttle-crack': (s) => s.controls.set('throttle', 0.10),
-  'prop-clear': (s) => {
-    s.pilot.setHeadYaw(1.2);
-    s.pilot.setHeadYaw(-1.2);
-  },
-  start: (s) => {
-    s.controls.set('magKey', detent(s, 'magKey', 'START'));
-    for (let t = 0; t < 60 * 3; t++) s.tick(STEP);
-    s.controls.set('magKey', detent(s, 'magKey', 'BOTH'));
-  },
-  'warm-idle': (s) => s.controls.set('throttle', 0.175),
-  'avionics-on': (s) => s.controls.set('avionicsMaster', 1),
-
-  'shutdown-avionics': (s) => s.controls.set('avionicsMaster', 0),
-  'shutdown-mixture': (s) => s.controls.set('mixture', 0),
-  'shutdown-mags': (s) => s.controls.set('magKey', detent(s, 'magKey', 'OFF')),
-  'shutdown-master': (s) => {
-    s.controls.set('masterBattery', 0);
-    s.controls.set('masterAlternator', 0);
-  },
-};
-
-/**
- * Items that are honestly an observation rather than an action: you arrive
- * at them having already done the thing that makes them true, and the step
- * is there to make you look at the result.
- *
- * Every other item has to be false when the list reaches it.
- */
-const OBSERVATIONS = new Set(['oil-pressure', 'ammeter-check', 'shutdown-throttle']);
 
 describe('the whole checklist, one item at a time', () => {
   it('can be flown from cold and dark to shut down again', () => {
@@ -96,7 +37,7 @@ describe('the whole checklist, one item at a time', () => {
         freebies.push(`${item.id} — "${item.callout}"`);
       }
 
-      ACTIONS[item.id]?.(sim);
+      CHECKLIST_ACTIONS[item.id]?.(sim);
 
       let waited = 0;
       while (checklist.position?.item.id === item.id && waited < 45) {
@@ -121,7 +62,7 @@ describe('the whole checklist, one item at a time', () => {
     for (let guard = 0; guard < 40 && !checklist.finished; guard++) {
       const item = checklist.position?.item;
       if (!item) break;
-      ACTIONS[item.id]?.(sim);
+      CHECKLIST_ACTIONS[item.id]?.(sim);
       let waited = 0;
       while (checklist.position?.item.id === item.id && waited < 45) {
         sim.tick(STEP);
@@ -160,7 +101,7 @@ describe('the whole checklist, one item at a time', () => {
     for (let guard = 0; guard < 20 && checklist.position?.item.id !== 'breakers-in'; guard++) {
       const item = checklist.position?.item;
       if (!item) break;
-      ACTIONS[item.id]?.(sim);
+      CHECKLIST_ACTIONS[item.id]?.(sim);
       let waited = 0;
       while (checklist.position?.item.id === item.id && waited < 45) {
         sim.tick(STEP);

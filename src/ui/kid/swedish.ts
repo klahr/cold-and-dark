@@ -369,6 +369,7 @@ export const KID_UI = {
   goalContinue: 'Ja, stäng av planet',
   goalAgain: '↺ Starta en gång till',
   wrongControl: (wanted: string) => `Inte den än! Först ska du: ${wanted}.`,
+  alreadyDone: 'Den är klar! Den ska stå kvar så.',
 } as const;
 
 /** Rotated so the hundredth tick still feels like someone noticed. */

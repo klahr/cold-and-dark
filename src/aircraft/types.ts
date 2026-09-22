@@ -212,6 +212,18 @@ export interface ChecklistItem {
    * point at.
    */
   highlightNow?: (sim: Simulation) => string | null;
+  /**
+   * Every control this step is allowed to touch. Defaults to `highlight`
+   * alone.
+   *
+   * This is what the guard rail is built from: while a step is current its
+   * controls are live, and every other control the checklist knows about is
+   * held where it stands. So it needs to name the controls a step legitimately
+   * uses but does not point at — the second half of a split master, the whole
+   * row of breakers behind a scan — or the pilot is locked out of the step
+   * they are being asked to do.
+   */
+  controls?: readonly string[];
   /** True once the pilot has done the thing. */
   satisfied: (sim: Simulation) => boolean;
   /** Why the step exists. This is the actual teaching content. */
@@ -290,8 +302,6 @@ export interface EngineParams {
   primeToCatch: number;
   /** Charge above which the engine floods. */
   primeToFlood: number;
-  /** Seconds for the prime charge to evaporate away. */
-  primeDecaySeconds: number;
   /** Seconds of cranking with fuel and spark before the engine fires. */
   catchSeconds: number;
   /** Oil pressure must reach the green within this many seconds. */

@@ -92,6 +92,9 @@ export const C172N_CHECKLISTS: readonly ChecklistSection[] = [
         // give the answer away before the scan, and none at all leaves the
         // one step on the list with no help available.
         highlightNow: (s) => BREAKER_IDS.find((id) => !s.controls.bool(id)) ?? null,
+        // The scan is about the whole row: any of them may need pushing in,
+        // not only whichever one the arrow has found first.
+        controls: BREAKER_IDS,
         satisfied: (s) => BREAKER_IDS.every((id) => s.controls.bool(id)),
         why: 'A breaker left popped from the last flight means that circuit is dead, and you will not find out until you need it. Check them by eye and by feel.',
         hint: 'Push any breaker that is standing proud of the panel back in.',
@@ -122,6 +125,9 @@ export const C172N_CHECKLISTS: readonly ChecklistSection[] = [
         id: 'master-on',
         callout: 'MASTER SWITCH — ON (BOTH HALVES)',
         highlight: 'masterBattery',
+        // The arrow points at BAT, but the step is not done until ALT is up
+        // too, so both halves have to be live while it is current.
+        controls: ['masterBattery', 'masterAlternator'],
         satisfied: (s) => s.controls.bool('masterBattery') && s.controls.bool('masterAlternator'),
         why: 'The red rocker is split: BAT connects the battery to the bus, ALT brings the alternator field online. The alternator cannot produce anything until the engine turns, but its field is fed from the battery, so both halves go up together.',
         hint: 'Flip both halves of the red MASTER rocker up.',
@@ -238,6 +244,7 @@ export const C172N_CHECKLISTS: readonly ChecklistSection[] = [
         id: 'shutdown-master',
         callout: 'MASTER SWITCH — OFF',
         highlight: 'masterBattery',
+        controls: ['masterBattery', 'masterAlternator'],
         satisfied: (s) => !s.controls.bool('masterBattery') && !s.controls.bool('masterAlternator'),
         why: 'Anything left on the bus will flatten the battery overnight.',
         hint: 'Flip both halves of the red MASTER rocker down.',

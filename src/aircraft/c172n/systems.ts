@@ -12,6 +12,9 @@ import type { SystemsParams } from '../types';
  * 0.55 charge units, the engine needs 1.0 to catch cold, and it floods above
  * 3.5. That puts the POH's "two to six strokes" squarely in the window and
  * makes the seventh stroke the one that ruins the start.
+ *
+ * The charge does not leak away with time — see `sim/systems/Fuel.ts` for
+ * why a modelled evaporation rate had to go.
  */
 export const C172N_SYSTEMS: SystemsParams = {
   engine: {
@@ -25,7 +28,6 @@ export const C172N_SYSTEMS: SystemsParams = {
     primePerStroke: 0.55,
     primeToCatch: 1.0,
     primeToFlood: 3.5,
-    primeDecaySeconds: 30,
     catchSeconds: 1.2,
     oilPressureTimeout: 30,
     oilPressureIdle: 65,

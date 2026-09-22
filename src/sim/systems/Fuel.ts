@@ -9,7 +9,15 @@ import type { Simulation } from '../Simulation';
  *  - The float bowl holds a few seconds of fuel, so an engine started with
  *    the selector OFF catches, runs, and then quits. That is far more
  *    instructive than simply refusing to start.
- *  - The primer charge decays. Prime, then wait too long, and it is gone.
+ *  - The primer charge does not decay. Once the fuel is in the manifold it
+ *    stays there until the engine burns it, so a pilot who primes and then
+ *    takes four minutes to find the ignition key still has a primed engine.
+ *    A real manifold does evaporate its prime over about half a minute, and
+ *    modelling that made the aeroplane unstartable for the six-year-old this
+ *    is built for: three strokes bought nineteen seconds, and the two steps
+ *    between PRIME and START take a child far longer than that. The failure
+ *    it produced taught nothing, because the thing that went wrong had
+ *    scrolled off the screen by the time it did.
  */
 export class Fuel {
   /** Litres remaining in each tank. */
@@ -68,14 +76,6 @@ export class Fuel {
       this.updateBoostPumpPrime(dt, sim);
     } else {
       this.trackPrimer(controls.num('primer'));
-    }
-
-    // Prime evaporates out of the manifold over about half a minute.
-    if (this.primeCharge > 0) {
-      this.primeCharge = Math.max(
-        0,
-        this.primeCharge - (dt / this.engineParams.primeDecaySeconds) * this.engineParams.primeToCatch,
-      );
     }
 
     // The bowl refills the moment the valve is open, and drains only when

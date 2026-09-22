@@ -12,6 +12,14 @@ export interface PointerCallbacks {
   onHover(control: ControlObject | null, screenX: number, screenY: number): void;
   /** Fired after any pilot-initiated value change, for audio and coaching. */
   onActuate(id: string, value: number): void;
+  /**
+   * Whether the checklist is letting this control move at all. A step
+   * already done stays done, and a step not yet reached cannot be done
+   * early; see `ChecklistRunner.isLocked`.
+   */
+  canOperate(id: string): boolean;
+  /** Fired when a press lands on a control the checklist is holding. */
+  onBlocked(id: string): void;
 }
 
 /**
@@ -81,6 +89,14 @@ export class Pointer {
       return;
     }
 
+    // A held control does not move, and the press does not fall through to
+    // the camera either: a switch that swings your view when you poke it
+    // reads as the cockpit being broken rather than the switch being shut.
+    if (!this.callbacks.canOperate(hit.control.def.id)) {
+      this.callbacks.onBlocked(hit.control.def.id);
+      return;
+    }
+
     this.active = hit.control;
     this.startX = e.clientX;
     this.startY = e.clientY;
@@ -129,8 +145,13 @@ export class Pointer {
 
     if (!control) return;
 
+    // Forced past the lock: a sprung detent coming home is the control's own
+    // physics, not the pilot moving it. The ignition key is the case — the
+    // start step completes while the key is still held at START, so a lock
+    // that also caught the release would leave the starter grinding against
+    // a running engine with no way to let go.
     const sprung = control.release(this.controls.num(control.def.id));
-    if (sprung !== null) this.commit(control, sprung);
+    if (sprung !== null) this.commit(control, sprung, true);
   };
 
   private onLeave = (): void => {
@@ -140,7 +161,12 @@ export class Pointer {
     this.callbacks.onHover(null, 0, 0);
   };
 
-  private commit(control: ControlObject, value: number): void {
+  private commit(control: ControlObject, value: number, force = false): void {
+    // The lock can land mid-gesture — the step completes as the knob passes
+    // its threshold — so the drag is cut off where it stood rather than
+    // being allowed to carry the control past it. Silently: they are already
+    // being told the step is done.
+    if (!force && !this.callbacks.canOperate(control.def.id)) return;
     const before = this.controls.num(control.def.id);
     this.controls.set(control.def.id, value);
     const after = this.controls.num(control.def.id);

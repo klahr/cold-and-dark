@@ -190,8 +190,12 @@ export class App {
           this.hoveredControlId = control?.def.id ?? null;
           this.hud.showTooltip(control ? this.describe(control.def) : null, x, y);
         },
+        // The checklist holds every control but the live step's. `hud` is
+        // built after the pointer, but nothing can be clicked before it is
+        // there, and an unbuilt overlay locks nothing.
+        canOperate: (controlId) => !this.hud?.checklist.isLocked(controlId),
+        onBlocked: (controlId) => this.hud?.onBlocked(controlId),
         onActuate: (controlId) => {
-          this.hud.onActuate(controlId);
           this.audio.click(clickKindFor(this.sim.controls.def(controlId).kind));
           // The tooltip is showing this control's old state; update it in
           // place so the readout agrees with what just happened.
@@ -407,8 +411,9 @@ export class App {
       this.controlRig,
       this.sim.controls,
       {
+        canOperate: (id) => !this.hud.checklist.isLocked(id),
+        onBlocked: (id) => this.hud.onBlocked(id),
         onActuate: (id) => {
-          this.hud.onActuate(id);
           this.audio.click(clickKindFor(this.sim.controls.def(id).kind));
         },
         // Straps the checklist to the left hand — a controller's grip, or

@@ -191,7 +191,10 @@ export class KidHud {
     }
 
     this.itemAge += dt;
-    const stuck = pos !== null && this.itemAge > STUCK_AFTER;
+    // Not once they have asked: the nudge exists to offer the button, and
+    // going on offering it after it has been pressed reads as the screen not
+    // noticing.
+    const stuck = pos !== null && !this.helpShown && this.itemAge > STUCK_AFTER;
     if (stuck === this.stuckEl.hidden) {
       this.stuckEl.hidden = !stuck;
       this.showBtn.classList.toggle('nudge', stuck);
@@ -214,10 +217,25 @@ export class KidHud {
     this.render();
   }
 
-  onActuate(id: string): void {
+  /**
+   * A control the checklist is holding has been pressed. It has not moved —
+   * that is the point — so the only thing left to do is say why, and the two
+   * reasons want different words.
+   *
+   * A step still ahead gets pointed back at the one on screen, because the
+   * child has almost certainly found the right switch too early rather than
+   * the wrong switch. A step already behind gets told it is finished: at six
+   * "it will not move" and "it is already done" feel like the same event, and
+   * only one of them is good news.
+   */
+  onBlocked(id: string): void {
+    const reason = this.checklist.lockReason(id);
+    if (reason === 'done') {
+      this.toast('wait', '✅', KID_UI.alreadyDone, '');
+      return;
+    }
     const pos = this.checklist.position;
-    const pending = this.checklist.pendingItemFor(id);
-    if (!pos || !pending) return;
+    if (reason !== 'not-yet' || !pos) return;
     const step = kidStep(pos.item.id) ?? UNKNOWN;
     this.toast('wait', '🕐', KID_UI.wrongControl(step.title), '');
   }
